@@ -14,6 +14,7 @@
       </div>
       <nav class="nav-links">
         <a class="button-link secondary" href="/">返回首页</a>
+        <a class="button-link secondary" href="/settings">自动扫描设置</a>
       </nav>
     </header>
 
@@ -26,6 +27,7 @@
               <strong>{{ task.output_name or task.task_id }}</strong>
               <span>{{ task.status.value }}</span>
             </div>
+            <p class="muted">{{ task.sync_tool.value }}</p>
             <div class="progress-bar"><span style="width: {{ task.progress }}%"></span></div>
             <p class="muted">{{ task.progress_message }}</p>
           </a>

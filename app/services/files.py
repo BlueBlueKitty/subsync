@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from app.config import Settings
+from app.models import SyncTool
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4v", ".ts"}
 SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".sub", ".vtt"}
@@ -127,39 +128,51 @@ def validate_media_file(settings: Settings, relative_path: str, kind: str) -> Pa
     return path
 
 
-def choose_output_path(video_path: Path, subtitle_suffix: str, output_name: str | None) -> Path:
-    output_dir = video_path.parent
+DERIVED_SUBTITLE_MARKERS = (".ffsubsync.", ".alass.", ".autosubsync.", ".shifted.")
+
+
+def build_engine_output_name(subtitle_name: str, sync_tool: SyncTool) -> str:
+    path = Path(subtitle_name)
+    return f"{path.stem}.{sync_tool.value}{path.suffix}"
+
+
+def is_derived_subtitle(path: Path) -> bool:
+    lowered = path.name.lower()
+    return any(marker in lowered for marker in DERIVED_SUBTITLE_MARKERS)
+
+
+def choose_output_path(
+    output_dir: Path,
+    subtitle_name: str,
+    sync_tool: SyncTool,
+    output_name: str | None = None,
+) -> Path:
     if output_name:
         if "/" in output_name or "\\" in output_name:
             raise ValueError("output_name must be a filename only")
-        candidate = output_dir / output_name
-    else:
-        candidate = output_dir / f"{video_path.stem}{subtitle_suffix}"
-        if candidate.exists():
-            counter = 2
-            candidate = output_dir / f"{video_path.stem}.{counter}{subtitle_suffix}"
-            while candidate.exists():
-                counter += 1
-                candidate = output_dir / f"{video_path.stem}.{counter}{subtitle_suffix}"
-    return candidate
+        return output_dir / output_name
+    return output_dir / build_engine_output_name(subtitle_name, sync_tool)
 
 
 def build_output_path(
     settings: Settings,
     video_relative_path: str,
     subtitle_relative_path: str,
-    output_name: str | None,
+    sync_tool: SyncTool,
+    output_name: str | None = None,
 ) -> Path:
     video_path = validate_media_file(settings, video_relative_path, "video")
     subtitle_path = validate_media_file(settings, subtitle_relative_path, "subtitle")
-    output_path = choose_output_path(video_path, subtitle_path.suffix, output_name)
+    output_path = choose_output_path(video_path.parent, subtitle_path.name, sync_tool, output_name)
     return _ensure_under_root(settings.media_root, output_path)
 
 
 def find_matching_subtitle(settings: Settings, video_relative_path: str) -> dict[str, str] | None:
     video_path = validate_media_file(settings, video_relative_path, "video")
     candidates = [
-        item for item in video_path.parent.iterdir() if item.is_file() and item.suffix.lower() in SUBTITLE_EXTENSIONS
+        item
+        for item in video_path.parent.iterdir()
+        if item.is_file() and item.suffix.lower() in SUBTITLE_EXTENSIONS and not is_derived_subtitle(item)
     ]
     if not candidates:
         return None
@@ -175,9 +188,177 @@ def find_matching_subtitle(settings: Settings, video_relative_path: str) -> dict
     best_match = sorted(candidates, key=score)[0]
     best_stem = best_match.stem.lower()
     if best_stem != video_stem and not best_stem.startswith(video_stem):
-        return None
+        video_count = len(
+            [item for item in video_path.parent.iterdir() if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS]
+        )
+        if len(candidates) != 1 or video_count != 1:
+            return None
     return {
         "name": best_match.name,
         "path": relative_media_path(settings, best_match),
         "directory": relative_media_path(settings, best_match.parent) if best_match.parent != settings.media_root.resolve() else "",
+    }
+
+
+def find_subtitle_directory(settings: Settings, video_relative_path: str) -> str | None:
+    video_path = validate_media_file(settings, video_relative_path, "video")
+    subtitles = [
+        item
+        for item in video_path.parent.iterdir()
+        if item.is_file() and item.suffix.lower() in SUBTITLE_EXTENSIONS and not is_derived_subtitle(item)
+    ]
+    if not subtitles:
+        return None
+    if video_path.parent == settings.media_root.resolve():
+        return ""
+    return relative_media_path(settings, video_path.parent)
+
+
+def find_matching_video(settings: Settings, subtitle_relative_path: str) -> dict[str, str] | None:
+    subtitle_path = validate_media_file(settings, subtitle_relative_path, "subtitle")
+    candidates = [
+        item
+        for item in subtitle_path.parent.iterdir()
+        if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS
+    ]
+    if not candidates:
+        return None
+
+    subtitle_stem = subtitle_path.stem.lower()
+
+    def score(candidate: Path) -> tuple[int, int, int, str]:
+        video_stem = candidate.stem.lower()
+        exact = int(video_stem == subtitle_stem)
+        video_prefix = int(subtitle_stem.startswith(video_stem))
+        subtitle_prefix = int(video_stem.startswith(subtitle_stem))
+        return (-exact, -video_prefix, -subtitle_prefix, candidate.name.lower())
+
+    best_match = sorted(candidates, key=score)[0]
+    best_stem = best_match.stem.lower()
+    if best_stem != subtitle_stem and not subtitle_stem.startswith(best_stem) and not best_stem.startswith(subtitle_stem):
+        if len(candidates) != 1:
+            return None
+    return {
+        "name": best_match.name,
+        "path": relative_media_path(settings, best_match),
+        "directory": relative_media_path(settings, best_match.parent) if best_match.parent != settings.media_root.resolve() else "",
+    }
+
+
+def discover_scan_candidates(
+    settings: Settings,
+    include_dirs: list[str],
+    exclude_dirs: list[str],
+    recursive: bool = True,
+) -> list[dict[str, str]]:
+    normalized_includes = include_dirs or [""]
+    roots = [resolve_media_path(settings, _normalize_relative_path(path)) for path in normalized_includes]
+    excluded = {
+        resolve_media_path(settings, _normalize_relative_path(path)).resolve()
+        for path in exclude_dirs
+        if path is not None
+    }
+
+    candidates: list[dict[str, str]] = []
+    seen_paths: set[str] = set()
+
+    def should_exclude(path: Path) -> bool:
+        resolved = path.resolve()
+        return any(resolved == excluded_path or excluded_path in resolved.parents for excluded_path in excluded)
+
+    for root_dir in roots:
+        if not root_dir.exists() or not root_dir.is_dir() or should_exclude(root_dir):
+            continue
+        directories = [root_dir]
+        if recursive:
+            directories.extend([path for path in root_dir.rglob("*") if path.is_dir() and not should_exclude(path)])
+
+        for directory in directories:
+            if should_exclude(directory):
+                continue
+            subtitles = sorted(
+                [
+                    item
+                    for item in directory.iterdir()
+                    if item.is_file() and item.suffix.lower() in SUBTITLE_EXTENSIONS and not is_derived_subtitle(item)
+                ],
+                key=lambda item: item.name.lower(),
+            )
+            for subtitle in subtitles:
+                subtitle_rel = relative_media_path(settings, subtitle)
+                if subtitle_rel in seen_paths:
+                    continue
+                seen_paths.add(subtitle_rel)
+                video = find_matching_video(settings, subtitle_rel)
+                if video is None:
+                    continue
+                candidates.append(
+                    {
+                        "subtitle_path": subtitle_rel,
+                        "subtitle_name": subtitle.name,
+                        "video_path": video["path"],
+                        "video_name": video["name"],
+                    }
+                )
+
+    candidates.sort(key=lambda item: item["subtitle_path"].lower())
+    return candidates
+
+
+def discover_batch_pairs(settings: Settings, relative_dir: str, recursive: bool = True) -> dict[str, object]:
+    root_dir = resolve_media_path(settings, _normalize_relative_path(relative_dir))
+    if not root_dir.exists() or not root_dir.is_dir():
+        raise FileNotFoundError("Directory does not exist")
+
+    matched_pairs: list[dict[str, str]] = []
+    unmatched_videos: list[str] = []
+    directories = [root_dir]
+    if recursive:
+        directories.extend([path for path in root_dir.rglob("*") if path.is_dir()])
+
+    for directory in directories:
+        videos = sorted(
+            [item for item in directory.iterdir() if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS],
+            key=lambda item: item.name.lower(),
+        )
+        subtitles = sorted(
+            [
+                item
+                for item in directory.iterdir()
+                if item.is_file() and item.suffix.lower() in SUBTITLE_EXTENSIONS and not is_derived_subtitle(item)
+            ],
+            key=lambda item: item.name.lower(),
+        )
+        used_subtitles: set[str] = set()
+
+        for video in videos:
+            video_rel = relative_media_path(settings, video)
+            match = find_matching_subtitle(settings, video_rel)
+            if match is None and len(videos) == 1 and len(subtitles) == 1:
+                only_subtitle = subtitles[0]
+                match = {
+                    "name": only_subtitle.name,
+                    "path": relative_media_path(settings, only_subtitle),
+                }
+            if match is None or match["path"] in used_subtitles:
+                unmatched_videos.append(video_rel)
+                continue
+            used_subtitles.add(match["path"])
+            matched_pairs.append(
+                {
+                    "video_path": video_rel,
+                    "subtitle_path": match["path"],
+                    "video_name": video.name,
+                    "subtitle_name": match["name"],
+                }
+            )
+
+    matched_pairs.sort(key=lambda item: item["video_path"].lower())
+    unmatched_videos.sort(key=str.lower)
+    return {
+        "directory": relative_media_path(settings, root_dir) if root_dir != settings.media_root.resolve() else "",
+        "recursive": recursive,
+        "pairs": matched_pairs,
+        "matched_count": len(matched_pairs),
+        "unmatched_videos": unmatched_videos,
     }

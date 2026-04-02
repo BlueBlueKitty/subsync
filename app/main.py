@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -11,31 +12,44 @@ from fastapi.templating import Jinja2Templates
 
 from app.auth import SessionManager
 from app.config import Settings, load_settings
-from app.models import CreateTaskRequest, TaskLogResponse
+from app.models import CreateTaskRequest, SchedulerConfig, SyncTool, TaskLogResponse
 from app.services.files import (
     SUBTITLE_EXTENSIONS,
     VIDEO_EXTENSIONS,
     build_output_path,
     choose_output_path,
+    discover_batch_pairs,
     find_matching_subtitle,
+    find_subtitle_directory,
     list_media_entries,
     resolve_media_path,
     validate_media_file,
 )
+from app.services.scheduler import SchedulerService
 from app.services.subtitle_tools import shift_subtitle_bytes
 from app.services.subtitle_tools import shift_subtitle_file
 from app.services.subtitle_tools import resolve_shift_save_path, save_shifted_subtitle
 from app.services.tasks import TaskManager
 
 
-def _save_uploaded_file(work_root: Path, upload: UploadFile, task_id: str, kind: str) -> Path:
+def _build_download_headers(filename: str) -> dict[str, str]:
+    ascii_fallback = filename.encode("ascii", errors="ignore").decode("ascii") or "download.bin"
+    encoded_filename = quote(filename)
+    return {
+        "Content-Disposition": (
+            f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded_filename}'
+        )
+    }
+
+
+def _save_uploaded_file(uploads_root: Path, upload: UploadFile, task_id: str, kind: str) -> Path:
     if not upload.filename:
         raise ValueError(f"缺少{kind}文件")
     suffix = Path(upload.filename).suffix.lower()
     allowed = VIDEO_EXTENSIONS if kind == "视频" else SUBTITLE_EXTENSIONS
     if suffix not in allowed:
         raise ValueError(f"{kind}文件格式不受支持")
-    upload_dir = work_root / "uploads" / task_id
+    upload_dir = uploads_root / task_id
     upload_dir.mkdir(parents=True, exist_ok=True)
     destination = upload_dir / upload.filename
     with destination.open("wb") as handle:
@@ -49,10 +63,21 @@ def _save_uploaded_file(work_root: Path, upload: UploadFile, task_id: str, kind:
 
 def create_app(settings: Settings) -> FastAPI:
     base_dir = Path(__file__).resolve().parent.parent
-    app = FastAPI(title="ffsubsync Web", docs_url=None, redoc_url=None)
+
+    @asynccontextmanager
+    async def app_lifespan(app: FastAPI):
+        settings.ensure_directories()
+        await app.state.scheduler_service.start()
+        try:
+            yield
+        finally:
+            await app.state.scheduler_service.stop()
+
+    app = FastAPI(title="subsync", docs_url=None, redoc_url=None, lifespan=app_lifespan)
     app.state.settings = settings
     app.state.session_manager = SessionManager(settings)
-    app.state.task_manager = TaskManager(settings.max_concurrent_tasks)
+    app.state.task_manager = TaskManager(settings.max_concurrent_tasks, settings.temp_dir)
+    app.state.scheduler_service = SchedulerService(settings, app.state.task_manager)
     templates = Jinja2Templates(directory=str(base_dir / "templates"))
     app.state.templates = templates
     app.mount("/static", StaticFiles(directory=str(base_dir / "static")), name="static")
@@ -94,12 +119,35 @@ def create_app(settings: Settings) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "index.html",
-            {"media_root": str(settings.media_root), "default_max_offset_seconds": 60},
+            {
+                "media_root": str(settings.media_root),
+                "data_root": str(settings.data_root),
+                "timezone_name": settings.timezone_name,
+                "default_sync_tool": SyncTool.FFSUBSYNC.value,
+                "default_max_offset_seconds": 60,
+                "default_ffsubsync_use_embedded_subtitles": True,
+                "default_ffsubsync_vad": "default",
+                "default_alass_split_penalty": 7,
+                "default_autosubsync_max_shift_secs": 20,
+                "default_autosubsync_parallelism": 3,
+            },
         )
 
     @app.get("/subtitle-tools", response_class=HTMLResponse)
     async def subtitle_tools_page(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(request, "subtitle_tools.html", {})
+
+    @app.get("/settings", response_class=HTMLResponse)
+    async def settings_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            {
+                "media_root": str(settings.media_root),
+                "data_root": str(settings.data_root),
+                "timezone_name": settings.timezone_name,
+            },
+        )
 
     @app.get("/tasks", response_class=HTMLResponse)
     async def tasks_page(request: Request) -> HTMLResponse:
@@ -135,9 +183,10 @@ def create_app(settings: Settings) -> FastAPI:
     async def match_subtitle_api(request: Request, video_path: str = Query(..., min_length=1)) -> JSONResponse:
         try:
             match = find_matching_subtitle(request.app.state.settings, video_path)
+            directory = find_subtitle_directory(request.app.state.settings, video_path)
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return JSONResponse({"match": match})
+        return JSONResponse({"match": match, "directory": directory})
 
     @app.post("/api/tasks")
     async def create_task_api(
@@ -146,20 +195,42 @@ def create_app(settings: Settings) -> FastAPI:
         subtitle_path: str = Form(default=""),
         subtitle_mode: str = Form(default="media"),
         output_name: str = Form(default=""),
+        sync_tool: SyncTool = Form(default=SyncTool.FFSUBSYNC),
         encoding: str = Form(default=""),
         max_offset_seconds: str = Form(default=""),
+        ffsubsync_use_embedded_subtitles: bool = Form(default=True),
         no_fix_framerate: bool = Form(default=False),
         gss: bool = Form(default=False),
+        ffsubsync_vad: str = Form(default="default"),
+        alass_use_embedded_subtitles: bool = Form(default=False),
+        alass_disable_fps_guessing: bool = Form(default=False),
+        alass_disable_speed_optimization: bool = Form(default=False),
+        alass_split_penalty: str = Form(default="7"),
+        autosubsync_use_embedded_subtitles: bool = Form(default=False),
+        autosubsync_max_shift_secs: str = Form(default="20"),
+        autosubsync_parallelism: str = Form(default="3"),
         subtitle_file: UploadFile | None = File(default=None),
     ) -> JSONResponse:
         payload = CreateTaskRequest(
+            sync_tool=sync_tool,
             video_path=video_path or "__media__",
             subtitle_path=subtitle_path or "__dynamic__",
             output_name=output_name.strip() or None,
             encoding=encoding.strip() or None,
             max_offset_seconds=int(max_offset_seconds) if max_offset_seconds.strip() else None,
+            ffsubsync_use_embedded_subtitles=ffsubsync_use_embedded_subtitles,
             no_fix_framerate=no_fix_framerate,
             gss=gss,
+            ffsubsync_vad=ffsubsync_vad,
+            alass_use_embedded_subtitles=alass_use_embedded_subtitles,
+            alass_disable_fps_guessing=alass_disable_fps_guessing,
+            alass_disable_speed_optimization=alass_disable_speed_optimization,
+            alass_split_penalty=int(alass_split_penalty) if alass_split_penalty.strip() else 7,
+            autosubsync_use_embedded_subtitles=autosubsync_use_embedded_subtitles,
+            autosubsync_max_shift_secs=(
+                int(autosubsync_max_shift_secs) if autosubsync_max_shift_secs.strip() else 20
+            ),
+            autosubsync_parallelism=int(autosubsync_parallelism) if autosubsync_parallelism.strip() else 3,
         )
         task_manager: TaskManager = request.app.state.task_manager
         source_type = "media"
@@ -171,7 +242,7 @@ def create_app(settings: Settings) -> FastAPI:
                 source_type = "upload"
                 if subtitle_file is None or not getattr(subtitle_file, "filename", ""):
                     raise ValueError("请上传字幕文件")
-                subtitle_real_path = _save_uploaded_file(settings.work_root, subtitle_file, temp_task_id, "字幕")
+                subtitle_real_path = _save_uploaded_file(settings.uploads_dir, subtitle_file, temp_task_id, "字幕")
             else:
                 subtitle_real_path = validate_media_file(request.app.state.settings, subtitle_path, "subtitle")
 
@@ -180,21 +251,127 @@ def create_app(settings: Settings) -> FastAPI:
                     request.app.state.settings,
                     video_path,
                     subtitle_path,
+                    payload.sync_tool,
                     payload.output_name,
                 )
             else:
-                output_real_path = choose_output_path(video_real_path, subtitle_real_path.suffix, payload.output_name)
+                output_real_path = choose_output_path(
+                    video_real_path.parent,
+                    subtitle_real_path.name,
+                    payload.sync_tool,
+                    payload.output_name,
+                )
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         task = await task_manager.create_task(payload, video_real_path, subtitle_real_path, output_real_path, source_type)
         return JSONResponse({"task_id": task.task_id, "status": task.status})
 
+    @app.get("/api/tasks/batch-preview")
+    async def batch_preview_api(
+        request: Request,
+        dir: str = Query(default=""),
+        recursive: bool = Query(default=True),
+    ) -> JSONResponse:
+        try:
+            payload = discover_batch_pairs(request.app.state.settings, dir, recursive=recursive)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(payload)
+
+    @app.post("/api/tasks/batch")
+    async def create_batch_tasks_api(
+        request: Request,
+        batch_dir: str = Form(default=""),
+        recursive: bool = Form(default=True),
+        sync_tool: SyncTool = Form(default=SyncTool.FFSUBSYNC),
+        ffsubsync_use_embedded_subtitles: bool = Form(default=True),
+        ffsubsync_vad: str = Form(default="default"),
+        no_fix_framerate: bool = Form(default=False),
+        gss: bool = Form(default=False),
+        alass_use_embedded_subtitles: bool = Form(default=False),
+        alass_disable_fps_guessing: bool = Form(default=False),
+        alass_disable_speed_optimization: bool = Form(default=False),
+        alass_split_penalty: str = Form(default="7"),
+        autosubsync_use_embedded_subtitles: bool = Form(default=False),
+        autosubsync_max_shift_secs: str = Form(default="20"),
+        autosubsync_parallelism: str = Form(default="3"),
+    ) -> JSONResponse:
+        task_manager: TaskManager = request.app.state.task_manager
+        try:
+            preview = discover_batch_pairs(request.app.state.settings, batch_dir, recursive=recursive)
+            if not preview["pairs"]:
+                raise ValueError("当前目录没有可批量处理的匹配视频和字幕")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        batch_items: list[tuple[CreateTaskRequest, Path, Path, Path, str]] = []
+        for pair in preview["pairs"]:
+            payload = CreateTaskRequest(
+                sync_tool=sync_tool,
+                ffsubsync_use_embedded_subtitles=ffsubsync_use_embedded_subtitles,
+                video_path=pair["video_path"],
+                subtitle_path=pair["subtitle_path"],
+                ffsubsync_vad=ffsubsync_vad,
+                no_fix_framerate=no_fix_framerate,
+                gss=gss,
+                alass_use_embedded_subtitles=alass_use_embedded_subtitles,
+                alass_disable_fps_guessing=alass_disable_fps_guessing,
+                alass_disable_speed_optimization=alass_disable_speed_optimization,
+                alass_split_penalty=int(alass_split_penalty) if alass_split_penalty.strip() else 7,
+                autosubsync_use_embedded_subtitles=autosubsync_use_embedded_subtitles,
+                autosubsync_max_shift_secs=(
+                    int(autosubsync_max_shift_secs) if autosubsync_max_shift_secs.strip() else 20
+                ),
+                autosubsync_parallelism=int(autosubsync_parallelism) if autosubsync_parallelism.strip() else 3,
+            )
+            video_real_path = validate_media_file(request.app.state.settings, pair["video_path"], "video")
+            subtitle_real_path = validate_media_file(request.app.state.settings, pair["subtitle_path"], "subtitle")
+            output_real_path = build_output_path(
+                request.app.state.settings,
+                pair["video_path"],
+                pair["subtitle_path"],
+                sync_tool,
+            )
+            batch_items.append((payload, video_real_path, subtitle_real_path, output_real_path, "media"))
+
+        tasks = await task_manager.create_tasks_batch(batch_items)
+        return JSONResponse(
+            {
+                "created_count": len(tasks),
+                "task_ids": [task.task_id for task in tasks],
+                "matched_count": preview["matched_count"],
+                "unmatched_videos": preview["unmatched_videos"],
+            }
+        )
+
     @app.get("/api/tasks")
     async def list_tasks_api(request: Request) -> JSONResponse:
         task_manager: TaskManager = request.app.state.task_manager
         tasks = [task.to_summary().model_dump(mode="json") for task in await task_manager.list_tasks()]
         return JSONResponse({"tasks": tasks})
+
+    @app.get("/api/settings/scheduler")
+    async def get_scheduler_settings_api(request: Request) -> JSONResponse:
+        scheduler: SchedulerService = request.app.state.scheduler_service
+        return JSONResponse(scheduler.get_state().model_dump(mode="json"))
+
+    @app.post("/api/settings/scheduler")
+    async def update_scheduler_settings_api(request: Request, payload: SchedulerConfig) -> JSONResponse:
+        scheduler: SchedulerService = request.app.state.scheduler_service
+        state = await scheduler.update_config(payload)
+        return JSONResponse(state.model_dump(mode="json"))
+
+    @app.get("/api/settings/scheduler/status")
+    async def get_scheduler_status_api(request: Request) -> JSONResponse:
+        scheduler: SchedulerService = request.app.state.scheduler_service
+        return JSONResponse(scheduler.get_state().model_dump(mode="json"))
+
+    @app.post("/api/settings/scheduler/run-now")
+    async def run_scheduler_now_api(request: Request) -> JSONResponse:
+        scheduler: SchedulerService = request.app.state.scheduler_service
+        status_payload = await scheduler.trigger_run_now()
+        return JSONResponse(status_payload.model_dump(mode="json"))
 
     @app.get("/api/tasks/{task_id}")
     async def get_task_api(request: Request, task_id: str) -> JSONResponse:
@@ -234,7 +411,7 @@ def create_app(settings: Settings) -> FastAPI:
         output_path = Path(task.output_path)
         if not task.can_download_output or not output_path.exists():
             raise HTTPException(status_code=404, detail="Output not available for download")
-        headers = {"Content-Disposition": f'attachment; filename="{output_path.name}"'}
+        headers = _build_download_headers(output_path.name)
         return StreamingResponse(iter([output_path.read_bytes()]), media_type="application/octet-stream", headers=headers)
 
     @app.post("/api/subtitles/shift")
@@ -254,7 +431,7 @@ def create_app(settings: Settings) -> FastAPI:
                 filename, shifted_content = shift_subtitle_file(
                     source_path,
                     offset_seconds,
-                    request.app.state.settings.work_root,
+                    request.app.state.settings.temp_dir,
                 )
                 source_filename = source_path.name
             else:
@@ -264,7 +441,7 @@ def create_app(settings: Settings) -> FastAPI:
                     subtitle_file.filename,
                     await subtitle_file.read(),
                     offset_seconds,
-                    request.app.state.settings.work_root,
+                    request.app.state.settings.temp_dir,
                 )
                 source_filename = subtitle_file.filename or "subtitle.srt"
 
@@ -285,7 +462,7 @@ def create_app(settings: Settings) -> FastAPI:
         if save_mode == "save":
             return JSONResponse({"saved_path": saved_path, "filename": filename})
 
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers = _build_download_headers(filename)
         if saved_path:
             headers["X-Saved-Path"] = saved_path
         return StreamingResponse(iter([shifted_content]), media_type="application/octet-stream", headers=headers)
@@ -304,7 +481,7 @@ def build_default_app() -> FastAPI:
             raise RuntimeError(error_message)
             yield
 
-        return FastAPI(title="ffsubsync Web", docs_url=None, redoc_url=None, lifespan=failing_lifespan)
+        return FastAPI(title="subsync", docs_url=None, redoc_url=None, lifespan=failing_lifespan)
     return create_app(settings)
 
 

@@ -1,6 +1,8 @@
 fastapi
+autosubsync
 uvicorn
 jinja2
 python-multipart
 itsdangerous
 ffsubsync
+pysubs2

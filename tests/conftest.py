@@ -12,20 +12,22 @@ from app.main import create_app
 @pytest.fixture()
 def settings(tmp_path: Path) -> Settings:
     media_root = tmp_path / "media"
-    work_root = tmp_path / "work"
+    data_root = tmp_path / "data"
     media_root.mkdir()
-    work_root.mkdir()
-    return Settings(
+    settings = Settings(
         app_password="secret",
         secret_key="test-secret",
         media_root=media_root,
-        work_root=work_root,
+        data_root=data_root,
         port=1314,
         max_concurrent_tasks=1,
     )
+    settings.ensure_directories()
+    return settings
 
 
 @pytest.fixture()
-def client(settings: Settings) -> TestClient:
+def client(settings: Settings):
     app = create_app(settings)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client

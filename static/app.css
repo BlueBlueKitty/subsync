@@ -216,12 +216,28 @@ input {
   font: inherit;
 }
 
+textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 0.85rem 1rem;
+  font: inherit;
+  resize: vertical;
+}
+
 select {
   width: 100%;
   border-radius: 12px;
   border: 1px solid var(--border);
   padding: 0.85rem 1rem;
   font: inherit;
+}
+
+output {
+  display: inline-block;
+  min-width: 2rem;
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .stack {
@@ -315,6 +331,8 @@ select {
 .task-list {
   display: grid;
   gap: 1rem;
+  max-height: 42vh;
+  overflow: auto;
 }
 
 .task-item {
@@ -328,6 +346,11 @@ select {
   text-align: left;
 }
 
+.task-item.active {
+  border-color: rgba(36, 92, 74, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(36, 92, 74, 0.18);
+}
+
 .task-item-head {
   display: flex;
   justify-content: space-between;
@@ -337,6 +360,8 @@ select {
 .task-sidebar {
   position: sticky;
   top: 1rem;
+  display: grid;
+  gap: 1rem;
 }
 
 .task-sidebar-head,
@@ -350,6 +375,24 @@ select {
 .nav-links {
   display: flex;
   align-items: center;
+}
+
+.log-section {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.batch-preview {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.pair-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
 }
 
 @media (max-width: 768px) {

@@ -1,17 +1,18 @@
 services:
-  ffsubsync-web:
+  subsync:
     build: .
-    container_name: ffsubsync-web
+    container_name: subsync
     ports:
       - "1314:1314"
     environment:
       PORT: "1314"
+      TZ: ${TZ:-Asia/Shanghai}
       MEDIA_ROOT: /media
-      WORK_ROOT: /work
+      DATA_ROOT: /data
       MAX_CONCURRENT_TASKS: "1"
       APP_PASSWORD: ${APP_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ${MEDIA_HOST_PATH:-./media}:/media
-      - ${WORK_HOST_PATH:-./work}:/work
+      - ${DATA_HOST_PATH:-./data}:/data
     restart: unless-stopped

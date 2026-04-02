@@ -10,7 +10,7 @@ from app.config import Settings
 class SessionManager:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._serializer = URLSafeSerializer(settings.secret_key, salt="ffsubsync-web")
+        self._serializer = URLSafeSerializer(settings.secret_key, salt="subsync")
 
     def authenticate(self, password: str) -> bool:
         return password == self._settings.app_password

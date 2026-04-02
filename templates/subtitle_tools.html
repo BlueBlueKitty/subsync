@@ -18,6 +18,7 @@
       </div>
       <nav class="nav-links">
         <a class="button-link secondary" href="/">返回首页</a>
+        <a class="button-link secondary" href="/settings">自动扫描设置</a>
       </nav>
     </header>
 
@@ -70,16 +71,12 @@
             <h2>输出方式</h2>
             <div class="mode-switch">
               <label class="radio">
-                <input type="radio" name="save_mode" value="download" checked />
-                仅下载到本地
+                <input type="radio" name="save_mode" value="save" checked />
+                保存到媒体目录
               </label>
               <label class="radio">
-                <input type="radio" name="save_mode" value="save" />
-                仅保存到媒体目录
-              </label>
-              <label class="radio">
-                <input type="radio" name="save_mode" value="save_and_download" />
-                保存并下载
+                <input type="radio" name="save_mode" value="download" />
+                下载到本地
               </label>
             </div>
             <p id="shift-output-hint" class="hint">默认文件名为原字幕名加 `.shifted`，冲突时自动追加 `1`、`2`。</p>

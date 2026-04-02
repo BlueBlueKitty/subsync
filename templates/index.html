@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ffsubsync Web</title>
+    <title>subsync</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
     <link rel="stylesheet" href="/static/app.css" />
   </head>
@@ -12,24 +12,53 @@
       <div class="brand-block">
         <img class="brand-logo" src="/static/logo.svg" alt="ffsubsync Web logo" />
         <div class="brand-copy">
-          <h1>ffsubsync Web</h1>
-          <p>视频从媒体目录选择，字幕可从媒体目录选择或本地上传，并在同页查看任务状态。</p>
+          <h1>subsync</h1>
+          <p>统一调用 ffsubsync、alass、autosubsync 的字幕同步与编辑工作台。</p>
         </div>
       </div>
-      <div class="topbar-actions">
-        <a class="button-link secondary" href="/subtitle-tools">手动字幕调整</a>
-      </div>
+      <nav class="nav-links">
+        <a class="button-link secondary" href="/settings">自动扫描设置</a>
+      </nav>
     </header>
 
     <main class="layout">
       <div class="workspace">
         <section class="card">
-          <h2>新建自动同步任务</h2>
+          <h2>字幕处理</h2>
           <p class="muted">媒体根目录：{{ media_root }}</p>
+          <p class="muted">数据目录：{{ data_root }}</p>
 
           <form id="task-form" class="stack" enctype="multipart/form-data">
+            <section class="stack">
+              <h3>处理方式</h3>
+              <div class="mode-switch">
+                <label class="radio">
+                  <input type="radio" name="action_mode" value="auto" checked />
+                  自动同步
+                </label>
+                <label class="radio">
+                  <input type="radio" name="action_mode" value="manual" />
+                  手动调整
+                </label>
+              </div>
+            </section>
+
+            <section id="auto-submit-mode-panel" class="stack">
+              <h3>自动同步模式</h3>
+              <div class="mode-switch">
+                <label class="radio">
+                  <input type="radio" name="auto_submit_mode" value="single" checked />
+                  单任务
+                </label>
+                <label class="radio">
+                  <input type="radio" name="auto_submit_mode" value="batch" />
+                  批量处理
+                </label>
+              </div>
+            </section>
+
             <div class="browser-grid">
-              <section class="browser" data-kind="video">
+              <section id="video-browser-card" class="browser" data-kind="video">
                 <div class="browser-head">
                   <h3>视频</h3>
                   <div class="toolbar compact">
@@ -50,6 +79,41 @@
                 <div class="breadcrumbs"></div>
                 <div class="entries"></div>
                 <p class="selected">未选择视频</p>
+              </section>
+
+              <section id="batch-browser-card" class="browser hidden" data-kind="video" data-role="batch-video-dir">
+                <div class="browser-head">
+                  <h3>批量目录</h3>
+                  <div class="toolbar compact">
+                    <button type="button" class="secondary refresh-button">刷新</button>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <input type="text" class="search-input" placeholder="搜索批量处理目录" />
+                  <select class="sort-select">
+                    <option value="name:asc">名称 A-Z</option>
+                    <option value="name:desc">名称 Z-A</option>
+                    <option value="modified:desc">修改时间新到旧</option>
+                    <option value="modified:asc">修改时间旧到新</option>
+                    <option value="size:desc">体积大到小</option>
+                    <option value="size:asc">体积小到大</option>
+                  </select>
+                </div>
+                <div class="toolbar compact">
+                  <button id="select-batch-dir" type="button" class="secondary">选择当前目录批量处理</button>
+                  <label class="checkbox">
+                    <input id="batch_recursive" type="checkbox" checked />
+                    递归扫描子目录
+                  </label>
+                </div>
+                <div class="breadcrumbs"></div>
+                <div class="entries"></div>
+                <p class="selected">当前未选择批量处理目录</p>
+                <div id="batch-preview" class="batch-preview hidden">
+                  <p id="batch-preview-summary" class="hint"></p>
+                  <ul id="batch-preview-list" class="pair-list"></ul>
+                  <p id="batch-preview-unmatched" class="hint"></p>
+                </div>
               </section>
 
               <section class="browser subtitle-browser" data-kind="subtitle">
@@ -95,32 +159,213 @@
 
             <input type="hidden" name="video_path" />
             <input type="hidden" name="subtitle_path" />
+            <input type="hidden" name="batch_dir" />
             <p id="subtitle-match-hint" class="hint">选择视频后，会自动跳转到同目录并尝试匹配字幕。</p>
 
-            <label for="output_name">输出文件名（可选）</label>
-            <input id="output_name" name="output_name" type="text" placeholder="默认与视频同名，冲突时自动追加 2、3..." />
-            <p class="hint" id="output-preview">默认输出到视频所在目录，并优先使用视频文件名。</p>
+            <section id="auto-mode-panel" class="stack">
+              <label for="sync_tool">同步工具</label>
+              <select id="sync_tool" name="sync_tool">
+                <option value="ffsubsync" {% if default_sync_tool == "ffsubsync" %}selected{% endif %}>ffsubsync</option>
+                <option value="alass">alass</option>
+                <option value="autosubsync">autosubsync</option>
+              </select>
+              <p id="sync-tool-hint" class="hint">ffsubsync：通用性较强；alass：通常更快，也支持参考字幕；autosubsync：基于语音检测，仅支持视频作为参考。</p>
 
-            <details>
-              <summary>高级设置</summary>
-              <div class="advanced-grid">
-                <label for="encoding">字幕编码</label>
-                <input id="encoding" name="encoding" type="text" placeholder="如 utf-8" />
+              <p class="hint" id="output-preview">默认输出为原字幕名加引擎后缀，例如 `movie.zh.ffsubsync.srt`。</p>
 
-                <label for="max_offset_seconds">最大偏移秒数</label>
-                <input id="max_offset_seconds" name="max_offset_seconds" type="number" min="1" value="{{ default_max_offset_seconds }}" />
+              <details>
+                <summary>高级设置</summary>
+                <div id="ffsubsync-options" class="advanced-grid sync-tool-options">
+                  <label
+                    class="checkbox"
+                    title="启用后，会先从视频中提取内嵌字幕轨，并优先把它作为参考源。适合视频自带时间正确的字幕轨时使用。"
+                  >
+                    <input
+                      id="ffsubsync_use_embedded_subtitles"
+                      name="ffsubsync_use_embedded_subtitles"
+                      type="checkbox"
+                      {% if default_ffsubsync_use_embedded_subtitles %}checked{% endif %}
+                    />
+                    使用视频中的内嵌字幕
+                  </label>
 
-                <label class="checkbox">
-                  <input id="no_fix_framerate" name="no_fix_framerate" type="checkbox" />
-                  不自动修正帧率不匹配
+                  <label
+                    class="checkbox"
+                    title="启用后，ffsubsync 不会尝试修正视频与字幕之间可能存在的帧率差异。适合你已经确认只是整体不同步，而不是帧率不一致的场景。"
+                  >
+                    <input id="no_fix_framerate" name="no_fix_framerate" type="checkbox" />
+                    不自动修正帧率不匹配
+                  </label>
+
+                  <label
+                    class="checkbox"
+                    title="启用后，ffsubsync 会用黄金分割搜索寻找更合适的帧率比例。通常能提高某些素材的对齐精度，但处理时间会更长。"
+                  >
+                    <input id="gss" name="gss" type="checkbox" />
+                    启用 GSS 搜索最佳帧率比例
+                  </label>
+
+                  <label
+                    for="ffsubsync_vad"
+                    title="选择 ffsubsync 提取语音活动时使用的检测器。默认一般够用；音频质量差时，可以尝试 auditok；如果环境支持，也可以尝试 silero。"
+                  >
+                    语音活动检测器
+                  </label>
+                  <select
+                    id="ffsubsync_vad"
+                    name="ffsubsync_vad"
+                    title="选择 ffsubsync 提取语音活动时使用的检测器。默认一般够用；音频质量差时，可以尝试 auditok；如果环境支持，也可以尝试 silero。"
+                  >
+                    <option value="default" {% if default_ffsubsync_vad == "default" %}selected{% endif %}>默认</option>
+                    <option value="subs_then_webrtc">subs_then_webrtc</option>
+                    <option value="subs_then_auditok">subs_then_auditok</option>
+                    <option value="subs_then_silero">subs_then_silero</option>
+                    <option value="webrtc">webrtc</option>
+                    <option value="auditok">auditok</option>
+                    <option value="silero">silero</option>
+                  </select>
+                </div>
+
+                <div id="alass-options" class="advanced-grid sync-tool-options hidden">
+                  <label
+                    class="checkbox"
+                    title="启用后，会先从视频中提取内嵌字幕流，并优先把它作为参考源。适合视频本身带有时间正确的字幕轨时使用。"
+                  >
+                    <input id="alass_use_embedded_subtitles" name="alass_use_embedded_subtitles" type="checkbox" checked />
+                    使用视频中的内嵌字幕
+                  </label>
+
+                  <label
+                    for="alass_split_penalty"
+                    title="控制 alass 在对齐时有多愿意对字幕做分段处理。值越大，越倾向于整体平移；值越小，越容易产生分段。-1 表示完全不分段。"
+                  >
+                    分割惩罚
+                  </label>
+                  <input
+                    id="alass_split_penalty"
+                    name="alass_split_penalty"
+                    type="range"
+                    min="-1"
+                    max="1000"
+                    value="{{ default_alass_split_penalty }}"
+                    title="控制 alass 在对齐时有多愿意对字幕做分段处理。值越大，越倾向于整体平移；值越小，越容易产生分段。-1 表示完全不分段。"
+                  />
+                  <output id="alass_split_penalty_value">{{ default_alass_split_penalty }}</output>
+
+                  <label
+                    class="checkbox"
+                    title="启用后，alass 不会尝试猜测并修正参考源与字幕之间的帧率差异。适合你明确知道没有帧率问题时使用。"
+                  >
+                    <input id="alass_disable_fps_guessing" name="alass_disable_fps_guessing" type="checkbox" />
+                    禁用 FPS 猜测
+                  </label>
+
+                  <label
+                    class="checkbox"
+                    title="启用后，关闭 alass 的速度优化，以换取更高精度。通常会明显增加处理时间。"
+                  >
+                    <input id="alass_disable_speed_optimization" name="alass_disable_speed_optimization" type="checkbox" />
+                    禁用速度优化
+                  </label>
+
+                  <p class="hint">`-1` 表示不拆分字幕，等价于 `--no-split`。</p>
+                </div>
+
+                <div id="autosubsync-options" class="advanced-grid sync-tool-options hidden">
+                  <label
+                    class="checkbox"
+                    title="启用后会优先检测视频中的内嵌字幕轨。由于 autosubsync 不适合直接以字幕作为参考，如果确实找到可用字幕轨，系统会自动切换到更适合该场景的 ffsubsync。"
+                  >
+                    <input id="autosubsync_use_embedded_subtitles" name="autosubsync_use_embedded_subtitles" type="checkbox" checked />
+                    使用视频中的内嵌字幕
+                  </label>
+
+                  <label
+                    for="autosubsync_max_shift_secs"
+                    title="限制 autosubsync 搜索字幕偏移的最大范围。值越大，能覆盖的错位越严重，但处理时间通常也会更长。"
+                  >
+                    最大位移（秒）
+                  </label>
+                  <input
+                    id="autosubsync_max_shift_secs"
+                    name="autosubsync_max_shift_secs"
+                    type="range"
+                    min="1"
+                    max="120"
+                    value="{{ default_autosubsync_max_shift_secs }}"
+                    title="限制 autosubsync 搜索字幕偏移的最大范围。值越大，能覆盖的错位越严重，但处理时间通常也会更长。"
+                  />
+                  <output id="autosubsync_max_shift_secs_value">{{ default_autosubsync_max_shift_secs }}</output>
+
+                  <label
+                    for="autosubsync_parallelism"
+                    title="控制 autosubsync 使用多少并行工作进程。数值越大通常越快，但也会占用更多 CPU 和内存。"
+                  >
+                    并行度
+                  </label>
+                  <input
+                    id="autosubsync_parallelism"
+                    name="autosubsync_parallelism"
+                    type="range"
+                    min="1"
+                    max="16"
+                    value="{{ default_autosubsync_parallelism }}"
+                    title="控制 autosubsync 使用多少并行工作进程。数值越大通常越快，但也会占用更多 CPU 和内存。"
+                  />
+                  <output id="autosubsync_parallelism_value">{{ default_autosubsync_parallelism }}</output>
+
+                  <p class="hint">当检测到可用内嵌字幕时，会自动切换到更适合字幕参考场景的 ffsubsync。</p>
+                </div>
+              </details>
+            </section>
+
+            <section id="manual-mode-panel" class="stack hidden">
+              <label for="manual_offset_seconds">整体偏移秒数</label>
+              <input id="manual_offset_seconds" name="manual_offset_seconds" type="number" step="0.1" value="0" />
+              <p class="hint">正数表示整体后移，负数表示整体前移，例如 `2.5` 或 `-1.2`。</p>
+
+              <div class="mode-switch">
+                <label class="radio">
+                  <input type="radio" name="save_mode" value="save" checked />
+                  保存到媒体目录
                 </label>
-
-                <label class="checkbox">
-                  <input id="gss" name="gss" type="checkbox" />
-                  启用 GSS 搜索最佳帧率比例
+                <label class="radio">
+                  <input type="radio" name="save_mode" value="download" />
+                  下载到本地
                 </label>
               </div>
-            </details>
+              <p class="hint">默认文件名为原字幕名加 `.shifted`，冲突时自动追加 `1`、`2`。</p>
+
+              <div id="home-shift-save-panel" class="stack hidden">
+                <section class="browser" data-kind="subtitle" data-role="home-shift-output-dir">
+                  <div class="browser-head">
+                    <h3>保存目录</h3>
+                    <div class="toolbar compact">
+                      <button type="button" class="secondary refresh-button">刷新</button>
+                    </div>
+                  </div>
+                  <div class="toolbar">
+                    <input type="text" class="search-input" placeholder="搜索目录" />
+                    <select class="sort-select">
+                      <option value="name:asc">名称 A-Z</option>
+                      <option value="name:desc">名称 Z-A</option>
+                      <option value="modified:desc">修改时间新到旧</option>
+                      <option value="modified:asc">修改时间旧到新</option>
+                      <option value="size:desc">体积大到小</option>
+                      <option value="size:asc">体积小到大</option>
+                    </select>
+                  </div>
+                  <div class="toolbar compact">
+                    <button id="select-home-save-dir" type="button" class="secondary">选择当前目录</button>
+                  </div>
+                  <div class="breadcrumbs"></div>
+                  <div class="entries"></div>
+                  <p class="selected">当前未指定保存目录，默认根目录</p>
+                </section>
+                <input type="hidden" name="save_dir" />
+              </div>
+              <div id="manual-success" class="alert hidden success-text"></div>
+            </section>
 
             <button id="submit-button" type="submit">提交同步任务</button>
             <div id="form-error" class="alert hidden"></div>
@@ -128,40 +373,51 @@
         </section>
 
         <aside class="card task-sidebar">
-          <div class="task-sidebar-head">
-            <h2>任务管理</h2>
-            <button id="refresh-tasks-button" type="button" class="secondary">刷新</button>
-          </div>
-          <div id="tasks-list" class="task-list"></div>
-          <section id="task-detail-panel" class="stack hidden">
-            <div class="status-row">
-              <span>状态</span>
-              <strong id="task-status">-</strong>
+          <section class="stack">
+            <div class="task-sidebar-head">
+              <h2>任务列表</h2>
+              <button id="refresh-tasks-button" type="button" class="secondary">刷新</button>
             </div>
-            <div class="status-row">
-              <span>进度</span>
-              <strong id="task-progress-text">0%</strong>
+            <div id="tasks-list" class="task-list"></div>
+          </section>
+          <section class="stack log-section">
+            <div class="task-sidebar-head">
+              <h2>运行日志</h2>
             </div>
-            <div class="progress-bar">
-              <span id="task-progress-bar" style="width: 0%"></span>
-            </div>
-            <div class="status-row">
-              <span>阶段</span>
-              <code id="task-progress-message">-</code>
-            </div>
-            <div class="status-row">
-              <span>输出</span>
-              <code id="task-output">-</code>
-            </div>
-            <div class="status-row">
-              <span>错误</span>
-              <code id="task-error">-</code>
-            </div>
-            <div class="task-actions">
-              <button id="stop-task-button" type="button" class="secondary">结束任务</button>
-              <a id="task-download-link" class="button-link secondary hidden" href="#">下载输出</a>
-            </div>
-            <pre id="task-log" class="log-panel">(请选择或提交一个任务)</pre>
+            <section id="task-detail-panel" class="stack">
+              <div class="status-row">
+                <span>工具</span>
+                <strong id="task-sync-tool">-</strong>
+              </div>
+              <div class="status-row">
+                <span>状态</span>
+                <strong id="task-status">-</strong>
+              </div>
+              <div class="status-row">
+                <span>进度</span>
+                <strong id="task-progress-text">0%</strong>
+              </div>
+              <div class="progress-bar">
+                <span id="task-progress-bar" style="width: 0%"></span>
+              </div>
+              <div class="status-row">
+                <span>阶段</span>
+                <code id="task-progress-message">-</code>
+              </div>
+              <div class="status-row">
+                <span>输出</span>
+                <code id="task-output">-</code>
+              </div>
+              <div class="status-row">
+                <span>错误</span>
+                <code id="task-error">-</code>
+              </div>
+              <div class="task-actions">
+                <button id="stop-task-button" type="button" class="secondary">结束任务</button>
+                <a id="task-download-link" class="button-link secondary hidden" href="#">下载输出</a>
+              </div>
+              <pre id="task-log" class="log-panel">(请选择一个任务查看运行日志)</pre>
+            </section>
           </section>
         </aside>
       </div>

@@ -29,12 +29,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 ENV PORT=1314
+ENV DATA_ROOT=/data
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
-LABEL org.opencontainers.image.title="ffsubsync-web"
+LABEL org.opencontainers.image.title="subsync"
 LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.ustc.edu.cn/debian|g' /etc/apt/sources.list.d/debian.sources \
@@ -45,8 +46,11 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.ustc.edu.cn/debian|g'
 
 COPY --from=builder /opt/venv /opt/venv
 COPY app /app/app
+COPY resources /app/resources
 COPY templates /app/templates
 COPY static /app/static
+
+RUN chmod +x /app/resources/engines/alass/linux/alass-cli || true
 
 EXPOSE 1314
 

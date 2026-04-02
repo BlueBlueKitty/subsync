@@ -60,12 +60,12 @@ def save_shifted_subtitle(settings: Settings, output_path: Path, content: bytes)
     return relative_media_path(settings, output_path)
 
 
-def shift_subtitle_content(filename: str, content: bytes, offset_seconds: float, work_root: Path) -> tuple[str, bytes]:
+def shift_subtitle_content(filename: str, content: bytes, offset_seconds: float, temp_root: Path) -> tuple[str, bytes]:
     ensure_supported_subtitle_name(filename)
     suffix = Path(filename).suffix
-    work_root.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
 
-    with NamedTemporaryFile(delete=False, suffix=suffix, dir=work_root) as source_file:
+    with NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_root) as source_file:
         source_file.write(content)
         source_path = Path(source_file.name)
 
@@ -80,9 +80,9 @@ def shift_subtitle_content(filename: str, content: bytes, offset_seconds: float,
         output_path.unlink(missing_ok=True)
 
 
-def shift_subtitle_bytes(filename: str, content: bytes, offset_seconds: float, work_root: Path) -> tuple[str, bytes]:
-    return shift_subtitle_content(filename, content, offset_seconds, work_root)
+def shift_subtitle_bytes(filename: str, content: bytes, offset_seconds: float, temp_root: Path) -> tuple[str, bytes]:
+    return shift_subtitle_content(filename, content, offset_seconds, temp_root)
 
 
-def shift_subtitle_file(path: Path, offset_seconds: float, work_root: Path) -> tuple[str, bytes]:
-    return shift_subtitle_content(path.name, path.read_bytes(), offset_seconds, work_root)
+def shift_subtitle_file(path: Path, offset_seconds: float, temp_root: Path) -> tuple[str, bytes]:
+    return shift_subtitle_content(path.name, path.read_bytes(), offset_seconds, temp_root)
