@@ -2,6 +2,10 @@
 
 `subsync` 是一个基于 `FastAPI` 的字幕同步与编辑 Web 工具，统一调用 `ffsubsync`、`alass`、`autosubsync` 三种引擎，并提供批量处理、自动扫描和手动时间轴调整能力。
 
+GitHub 仓库：
+
+https://github.com/BlueBlueKitty/subsync
+
 ## 项目介绍
 
 项目面向本地媒体库场景，支持：
