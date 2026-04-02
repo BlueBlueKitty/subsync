@@ -2,7 +2,7 @@
 set -eu
 
 IMAGE_NAME="${IMAGE_NAME:-bluebluekitty/subsync}"
-VERSION="${VERSION:-v0.1.0}"
+VERSION="${VERSION:-v0.1.1}"
 VERSION_NO_V="${VERSION#v}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 

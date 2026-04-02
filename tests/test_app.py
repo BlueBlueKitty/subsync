@@ -7,6 +7,7 @@ from pathlib import Path
 import pysubs2
 
 from app.models import CreateTaskRequest, SyncTool, TaskStatus
+from app.logging_utils import should_filter_access_log
 from app.services.ffsubsync_runner import build_ffsubsync_command
 from app.services.files import (
     build_output_path,
@@ -79,6 +80,16 @@ def test_output_name_generation(settings) -> None:
     subtitle.write_text("1")
     output = build_output_path(settings, "subs/movie.mkv", "subs/movie.zh.srt", SyncTool.FFSUBSYNC)
     assert output.name == "movie.zh.ffsubsync.srt"
+
+
+def test_should_filter_access_log_only_for_polling_endpoints() -> None:
+    assert should_filter_access_log("GET", "/api/tasks")
+    assert should_filter_access_log("GET", "/api/tasks/abc123")
+    assert should_filter_access_log("GET", "/api/tasks/abc123/log")
+    assert should_filter_access_log("GET", "/api/settings/scheduler/status")
+    assert not should_filter_access_log("POST", "/api/tasks")
+    assert not should_filter_access_log("GET", "/api/tasks/abc123/download")
+    assert not should_filter_access_log("GET", "/")
 
 
 def test_output_name_generation_avoids_overwrite(settings) -> None:
@@ -275,8 +286,12 @@ def test_task_manager_state_flow(tmp_path: Path) -> None:
         try:
             task = await manager.create_task(payload, video, subtitle, output, "media")
             assert task.status in {TaskStatus.QUEUED, TaskStatus.RUNNING}
-            await asyncio.sleep(0.05)
             saved = await manager.get_task(task.task_id)
+            for _ in range(20):
+                if saved.status == TaskStatus.SUCCEEDED:
+                    break
+                await asyncio.sleep(0.02)
+                saved = await manager.get_task(task.task_id)
             assert saved.status == TaskStatus.SUCCEEDED
             assert saved.sync_tool == SyncTool.FFSUBSYNC
             assert "working" in saved.log_text()
@@ -377,8 +392,12 @@ def test_create_alass_task_records_sync_tool(client, settings, monkeypatch) -> N
     )
     assert response.status_code == 200
     task_id = response.json()["task_id"]
-    time.sleep(0.05)
     task = client.get(f"/api/tasks/{task_id}").json()
+    for _ in range(20):
+        if task["status"] == "succeeded":
+            break
+        time.sleep(0.02)
+        task = client.get(f"/api/tasks/{task_id}").json()
     assert task["sync_tool"] == "alass"
     assert task["status"] == "succeeded"
 
@@ -651,8 +670,12 @@ def test_upload_task_returns_downloadable_output(client, settings, monkeypatch) 
     )
     assert response.status_code == 200
     task_id = response.json()["task_id"]
-    time.sleep(0.05)
     task = client.get(f"/api/tasks/{task_id}").json()
+    for _ in range(20):
+        if task["status"] == "succeeded":
+            break
+        time.sleep(0.02)
+        task = client.get(f"/api/tasks/{task_id}").json()
     assert task["can_download_output"] is True
     assert task["status"] == "succeeded"
     assert task["output_name"] == "clip.ffsubsync.srt"
@@ -696,8 +719,12 @@ def test_media_task_returns_downloadable_output_with_unicode_filename(client, se
     )
     assert response.status_code == 200
     task_id = response.json()["task_id"]
-    time.sleep(0.05)
     task = client.get(f"/api/tasks/{task_id}").json()
+    for _ in range(20):
+        if task["status"] == "succeeded":
+            break
+        time.sleep(0.02)
+        task = client.get(f"/api/tasks/{task_id}").json()
     assert task["can_download_output"] is True
     assert task["status"] == "succeeded"
 
@@ -741,8 +768,12 @@ def test_task_manager_keeps_only_recent_completed_tasks(tmp_path: Path) -> None:
                 output = tmp_path / f"subtitle-{index}.ffsubsync.srt"
                 payload = CreateTaskRequest(video_path="video.mkv", subtitle_path="subtitle.srt")
                 await manager.create_task(payload, video, subtitle, output, "media")
-            await asyncio.sleep(0.2)
             tasks = await manager.list_tasks()
+            for _ in range(30):
+                if len(tasks) <= 100:
+                    break
+                await asyncio.sleep(0.05)
+                tasks = await manager.list_tasks()
             assert len(tasks) == 100
         finally:
             asyncio.create_subprocess_exec = original

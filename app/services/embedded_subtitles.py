@@ -23,6 +23,15 @@ class ExtractedSubtitle:
     codec_name: str
 
 
+def _decode_process_output(data: bytes) -> str:
+    for encoding in ("utf-8", "gb18030", "cp936", "latin-1"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def _subtitle_event_count(path: Path) -> int:
     try:
         return len(pysubs2.load(str(path)))
@@ -59,12 +68,13 @@ def extract_best_embedded_subtitle(
         "csv=p=0",
         str(video_path),
     ]
-    probe = subprocess.run(ffprobe_command, capture_output=True, text=True, check=False)
+    probe = subprocess.run(ffprobe_command, capture_output=True, check=False)
     if probe.returncode != 0:
         return None
 
     compatible_streams: list[tuple[str, str, str]] = []
-    for line in probe.stdout.splitlines():
+    probe_stdout = _decode_process_output(probe.stdout)
+    for line in probe_stdout.splitlines():
         if not line.strip():
             continue
         parts = [part.strip() for part in line.split(",")]
@@ -97,7 +107,7 @@ def extract_best_embedded_subtitle(
             codec_name,
             str(output_path),
         ]
-        run = subprocess.run(ffmpeg_command, capture_output=True, text=True, check=False)
+        run = subprocess.run(ffmpeg_command, capture_output=True, check=False)
         if run.returncode == 0 and output_path.exists():
             extracted_files.append((output_path, stream_index, codec_name))
 

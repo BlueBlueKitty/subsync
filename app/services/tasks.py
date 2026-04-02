@@ -246,7 +246,8 @@ class TaskManager:
                 )
             )
             if extraction_enabled:
-                extracted = extract_best_embedded_subtitle(
+                extracted = await asyncio.to_thread(
+                    extract_best_embedded_subtitle,
                     video_path,
                     subtitle_path,
                     extraction_root,

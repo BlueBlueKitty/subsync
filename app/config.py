@@ -17,6 +17,7 @@ class Settings:
     max_concurrent_tasks: int = 1
     session_cookie_name: str = "subsync_session"
     timezone_name: str = "UTC"
+    quiet_polling_access_logs: bool = True
 
     @property
     def config_dir(self) -> Path:
@@ -51,6 +52,11 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    def _parse_bool(value: str | None, default: bool) -> bool:
+        if value is None:
+            return default
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+
     app_password = os.getenv("APP_PASSWORD", "").strip()
     secret_key = os.getenv("SECRET_KEY", "").strip()
     if not app_password:
@@ -63,6 +69,7 @@ def load_settings() -> Settings:
     timezone_name = os.getenv("TZ", "UTC").strip() or "UTC"
     port = int(os.getenv("PORT", "1314"))
     max_concurrent_tasks = int(os.getenv("MAX_CONCURRENT_TASKS", "1"))
+    quiet_polling_access_logs = _parse_bool(os.getenv("QUIET_POLLING_ACCESS_LOGS"), True)
     if port != 1314:
         raise RuntimeError("PORT must be 1314 for this deployment")
     if max_concurrent_tasks < 1:
@@ -76,6 +83,7 @@ def load_settings() -> Settings:
         port=port,
         max_concurrent_tasks=max_concurrent_tasks,
         timezone_name=timezone_name,
+        quiet_polling_access_logs=quiet_polling_access_logs,
     )
     settings.ensure_directories()
     return settings

@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.auth import SessionManager
 from app.config import Settings, load_settings
+from app.logging_utils import install_polling_access_log_filter
 from app.models import CreateTaskRequest, SchedulerConfig, SyncTool, TaskLogResponse
 from app.services.files import (
     SUBTITLE_EXTENSIONS,
@@ -63,6 +64,9 @@ def _save_uploaded_file(uploads_root: Path, upload: UploadFile, task_id: str, ki
 
 def create_app(settings: Settings) -> FastAPI:
     base_dir = Path(__file__).resolve().parent.parent
+
+    if settings.quiet_polling_access_logs:
+        install_polling_access_log_filter()
 
     @asynccontextmanager
     async def app_lifespan(app: FastAPI):

@@ -96,6 +96,8 @@ docker run -d \
   容器内数据目录，用于保存配置、上传文件、运行状态和临时文件
 - `-e MAX_CONCURRENT_TASKS=1`
   同时运行的后台任务数量；机器性能更高时可以适当调大
+- `-e QUIET_POLLING_ACCESS_LOGS=true`
+  默认静默前端轮询产生的 access log，避免后台被 `/api/tasks`、`/log` 等请求刷屏
 - `-v /path/to/media:/media`
   把宿主机媒体目录挂载到容器内的 `/media`
 - `-v /path/to/data:/data`
@@ -153,6 +155,8 @@ compose 环境变量说明：
   宿主机上的媒体目录，会挂载到容器内 `/media`
 - `DATA_HOST_PATH`
   宿主机上的数据目录，会挂载到容器内 `/data`
+- `QUIET_POLLING_ACCESS_LOGS`
+  是否静默轮询接口的访问日志，默认 `true`；如需完整 `uvicorn` access log，可改成 `false`
 
 `DATA_ROOT` 目录结构：
 
