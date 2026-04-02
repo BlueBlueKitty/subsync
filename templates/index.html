@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ffsubsync Web</title>
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <img class="brand-logo" src="/static/logo.svg" alt="ffsubsync Web logo" />
+        <div class="brand-copy">
+          <h1>ffsubsync Web</h1>
+          <p>视频从媒体目录选择，字幕可从媒体目录选择或本地上传，并在同页查看任务状态。</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <a class="button-link secondary" href="/subtitle-tools">手动字幕调整</a>
+      </div>
+    </header>
+
+    <main class="layout">
+      <div class="workspace">
+        <section class="card">
+          <h2>新建自动同步任务</h2>
+          <p class="muted">媒体根目录：{{ media_root }}</p>
+
+          <form id="task-form" class="stack" enctype="multipart/form-data">
+            <div class="browser-grid">
+              <section class="browser" data-kind="video">
+                <div class="browser-head">
+                  <h3>视频</h3>
+                  <div class="toolbar compact">
+                    <button type="button" class="secondary refresh-button">刷新</button>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <input type="text" class="search-input" placeholder="搜索视频文件或目录" />
+                  <select class="sort-select">
+                    <option value="name:asc">名称 A-Z</option>
+                    <option value="name:desc">名称 Z-A</option>
+                    <option value="modified:desc">修改时间新到旧</option>
+                    <option value="modified:asc">修改时间旧到新</option>
+                    <option value="size:desc">体积大到小</option>
+                    <option value="size:asc">体积小到大</option>
+                  </select>
+                </div>
+                <div class="breadcrumbs"></div>
+                <div class="entries"></div>
+                <p class="selected">未选择视频</p>
+              </section>
+
+              <section class="browser subtitle-browser" data-kind="subtitle">
+                <div class="browser-head">
+                  <h3>字幕</h3>
+                  <div class="toolbar compact">
+                    <button type="button" class="secondary refresh-button">刷新</button>
+                  </div>
+                </div>
+                <div class="mode-switch">
+                  <label class="radio">
+                    <input type="radio" name="subtitle_mode" value="media" checked />
+                    从媒体目录选择
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="subtitle_mode" value="upload" />
+                    上传本地字幕
+                  </label>
+                </div>
+                <div id="subtitle-media-panel" class="stack">
+                  <div class="toolbar">
+                    <input type="text" class="search-input" placeholder="搜索字幕文件或目录" />
+                    <select class="sort-select">
+                      <option value="name:asc">名称 A-Z</option>
+                      <option value="name:desc">名称 Z-A</option>
+                      <option value="modified:desc">修改时间新到旧</option>
+                      <option value="modified:asc">修改时间旧到新</option>
+                      <option value="size:desc">体积大到小</option>
+                      <option value="size:asc">体积小到大</option>
+                    </select>
+                  </div>
+                  <div class="breadcrumbs"></div>
+                  <div class="entries"></div>
+                  <p class="selected">未选择字幕</p>
+                </div>
+                <div id="subtitle-upload-panel" class="stack hidden">
+                  <label for="subtitle_file">上传本地字幕</label>
+                  <input id="subtitle_file" name="subtitle_file" type="file" accept=".srt,.ass,.ssa,.sub,.vtt" />
+                  <p class="hint">只上传字幕，视频仍从媒体目录中选择。</p>
+                </div>
+              </section>
+            </div>
+
+            <input type="hidden" name="video_path" />
+            <input type="hidden" name="subtitle_path" />
+            <p id="subtitle-match-hint" class="hint">选择视频后，会自动跳转到同目录并尝试匹配字幕。</p>
+
+            <label for="output_name">输出文件名（可选）</label>
+            <input id="output_name" name="output_name" type="text" placeholder="默认与视频同名，冲突时自动追加 2、3..." />
+            <p class="hint" id="output-preview">默认输出到视频所在目录，并优先使用视频文件名。</p>
+
+            <details>
+              <summary>高级设置</summary>
+              <div class="advanced-grid">
+                <label for="encoding">字幕编码</label>
+                <input id="encoding" name="encoding" type="text" placeholder="如 utf-8" />
+
+                <label for="max_offset_seconds">最大偏移秒数</label>
+                <input id="max_offset_seconds" name="max_offset_seconds" type="number" min="1" value="{{ default_max_offset_seconds }}" />
+
+                <label class="checkbox">
+                  <input id="no_fix_framerate" name="no_fix_framerate" type="checkbox" />
+                  不自动修正帧率不匹配
+                </label>
+
+                <label class="checkbox">
+                  <input id="gss" name="gss" type="checkbox" />
+                  启用 GSS 搜索最佳帧率比例
+                </label>
+              </div>
+            </details>
+
+            <button id="submit-button" type="submit">提交同步任务</button>
+            <div id="form-error" class="alert hidden"></div>
+          </form>
+        </section>
+
+        <aside class="card task-sidebar">
+          <div class="task-sidebar-head">
+            <h2>任务管理</h2>
+            <button id="refresh-tasks-button" type="button" class="secondary">刷新</button>
+          </div>
+          <div id="tasks-list" class="task-list"></div>
+          <section id="task-detail-panel" class="stack hidden">
+            <div class="status-row">
+              <span>状态</span>
+              <strong id="task-status">-</strong>
+            </div>
+            <div class="status-row">
+              <span>进度</span>
+              <strong id="task-progress-text">0%</strong>
+            </div>
+            <div class="progress-bar">
+              <span id="task-progress-bar" style="width: 0%"></span>
+            </div>
+            <div class="status-row">
+              <span>阶段</span>
+              <code id="task-progress-message">-</code>
+            </div>
+            <div class="status-row">
+              <span>输出</span>
+              <code id="task-output">-</code>
+            </div>
+            <div class="status-row">
+              <span>错误</span>
+              <code id="task-error">-</code>
+            </div>
+            <div class="task-actions">
+              <button id="stop-task-button" type="button" class="secondary">结束任务</button>
+              <a id="task-download-link" class="button-link secondary hidden" href="#">下载输出</a>
+            </div>
+            <pre id="task-log" class="log-panel">(请选择或提交一个任务)</pre>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

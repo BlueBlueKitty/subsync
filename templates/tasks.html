@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>任务管理</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>任务管理</h1>
+        <p>查看全部自动同步任务、状态和输出。</p>
+      </div>
+      <nav class="nav-links">
+        <a class="button-link secondary" href="/">返回首页</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="card stack">
+        <div id="tasks-list" class="task-list">
+          {% for task in tasks %}
+          <a class="task-item" href="/tasks/{{ task.task_id }}">
+            <div class="task-item-head">
+              <strong>{{ task.output_name or task.task_id }}</strong>
+              <span>{{ task.status.value }}</span>
+            </div>
+            <div class="progress-bar"><span style="width: {{ task.progress }}%"></span></div>
+            <p class="muted">{{ task.progress_message }}</p>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+
+    <script>window.TASK_LIST_PAGE = true;</script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

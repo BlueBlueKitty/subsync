@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ffsubsync Web 登录</title>
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body class="login-body">
+    <main class="login-card">
+      <div class="login-brand">
+        <img class="brand-logo" src="/static/logo.svg" alt="ffsubsync Web logo" />
+        <h1>ffsubsync Web</h1>
+      </div>
+      <p>输入访问口令后，即可在 FnOS 上同步视频与字幕。</p>
+      {% if error %}
+      <div class="alert">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/login" class="stack">
+        <label for="password">访问口令</label>
+        <input id="password" name="password" type="password" required />
+        <button type="submit">登录</button>
+      </form>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>字幕时间轴调整</title>
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <img class="brand-logo" src="/static/logo.svg" alt="ffsubsync Web logo" />
+        <div class="brand-copy">
+          <h1>字幕时间轴调整</h1>
+          <p>上传字幕文件，手动输入整体偏移时间，调整后直接下载。</p>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a class="button-link secondary" href="/">返回首页</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="card">
+        <form id="subtitle-shift-form" class="stack" enctype="multipart/form-data">
+          <div class="mode-switch">
+            <label class="radio">
+              <input type="radio" name="subtitle_mode" value="media" checked />
+              从媒体目录选择
+            </label>
+            <label class="radio">
+              <input type="radio" name="subtitle_mode" value="upload" />
+              上传本地字幕
+            </label>
+          </div>
+
+          <div id="shift-media-panel" class="stack">
+            <section class="browser" data-kind="subtitle" data-role="shift-subtitle">
+              <div class="browser-head">
+                <h3>字幕</h3>
+                <div class="toolbar compact">
+                  <button type="button" class="secondary refresh-button">刷新</button>
+                </div>
+              </div>
+              <div class="toolbar">
+                <input type="text" class="search-input" placeholder="搜索字幕文件或目录" />
+                <select class="sort-select">
+                  <option value="name:asc">名称 A-Z</option>
+                  <option value="name:desc">名称 Z-A</option>
+                  <option value="modified:desc">修改时间新到旧</option>
+                  <option value="modified:asc">修改时间旧到新</option>
+                  <option value="size:desc">体积大到小</option>
+                  <option value="size:asc">体积小到大</option>
+                </select>
+              </div>
+              <div class="breadcrumbs"></div>
+              <div class="entries"></div>
+              <p class="selected">未选择字幕</p>
+            </section>
+            <input type="hidden" name="subtitle_path" />
+          </div>
+
+          <div id="shift-upload-panel" class="stack hidden">
+            <label for="subtitle_file">上传字幕文件</label>
+            <input id="subtitle_file" name="subtitle_file" type="file" accept=".srt,.ass,.ssa,.sub,.vtt" />
+          </div>
+
+          <section class="stack">
+            <h2>输出方式</h2>
+            <div class="mode-switch">
+              <label class="radio">
+                <input type="radio" name="save_mode" value="download" checked />
+                仅下载到本地
+              </label>
+              <label class="radio">
+                <input type="radio" name="save_mode" value="save" />
+                仅保存到媒体目录
+              </label>
+              <label class="radio">
+                <input type="radio" name="save_mode" value="save_and_download" />
+                保存并下载
+              </label>
+            </div>
+            <p id="shift-output-hint" class="hint">默认文件名为原字幕名加 `.shifted`，冲突时自动追加 `1`、`2`。</p>
+          </section>
+
+          <div id="shift-save-panel" class="stack hidden">
+            <section class="browser" data-kind="subtitle" data-role="shift-output-dir">
+              <div class="browser-head">
+                <h3>保存目录</h3>
+                <div class="toolbar compact">
+                  <button type="button" class="secondary refresh-button">刷新</button>
+                </div>
+              </div>
+              <div class="toolbar">
+                <input type="text" class="search-input" placeholder="搜索目录" />
+                <select class="sort-select">
+                  <option value="name:asc">名称 A-Z</option>
+                  <option value="name:desc">名称 Z-A</option>
+                  <option value="modified:desc">修改时间新到旧</option>
+                  <option value="modified:asc">修改时间旧到新</option>
+                  <option value="size:desc">体积大到小</option>
+                  <option value="size:asc">体积小到大</option>
+                </select>
+              </div>
+              <div class="toolbar compact">
+                <button id="select-shift-save-dir" type="button" class="secondary">选择当前目录</button>
+              </div>
+              <div class="breadcrumbs"></div>
+              <div class="entries"></div>
+              <p class="selected">当前未指定保存目录，默认根目录</p>
+            </section>
+            <input type="hidden" name="save_dir" />
+          </div>
+
+          <label for="offset_seconds">整体偏移秒数</label>
+          <input
+            id="offset_seconds"
+            name="offset_seconds"
+            type="number"
+            step="0.1"
+            value="0"
+            required
+          />
+          <p class="hint">正数表示整体后移，负数表示整体前移，例如 `2.5` 或 `-1.2`。</p>
+
+          <button id="subtitle-shift-submit" type="submit">开始处理</button>
+          <div id="subtitle-shift-error" class="alert hidden"></div>
+          <div id="subtitle-shift-success" class="alert hidden success-text"></div>
+        </form>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

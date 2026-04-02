@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>任务 {{ task_id }}</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>任务详情</h1>
+        <p>任务 ID：<code>{{ task_id }}</code></p>
+      </div>
+      <nav class="nav-links">
+        <a class="button-link secondary" href="/">返回首页</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="card stack">
+        <div class="status-row">
+          <span>状态</span>
+          <strong id="task-status">{{ task.status.value }}</strong>
+        </div>
+        <div class="status-row">
+          <span>进度</span>
+          <strong id="task-progress-text">{{ task.progress }}%</strong>
+        </div>
+        <div class="progress-bar">
+          <span id="task-progress-bar" style="width: {{ task.progress }}%"></span>
+        </div>
+        <div class="status-row">
+          <span>阶段</span>
+          <code id="task-progress-message">{{ task.progress_message or "-" }}</code>
+        </div>
+        <div class="status-row">
+          <span>视频</span>
+          <code id="task-video">{{ task.video_path }}</code>
+        </div>
+        <div class="status-row">
+          <span>字幕</span>
+          <code id="task-subtitle">{{ task.subtitle_path }}</code>
+        </div>
+        <div class="status-row">
+          <span>输出</span>
+          <code id="task-output">{{ task.output_path or "-" }}</code>
+        </div>
+        <div class="status-row">
+          <span>下载</span>
+          {% if task.can_download_output %}
+          <a id="task-download-link" class="button-link secondary" href="/api/tasks/{{ task_id }}/download">下载输出文件</a>
+          {% else %}
+          <code id="task-download-link">仅上传任务支持直接下载</code>
+          {% endif %}
+        </div>
+        <div class="status-row">
+          <span>错误</span>
+          <code id="task-error">{{ task.error or "-" }}</code>
+        </div>
+      </section>
+
+      <section class="card stack">
+        <h2>实时日志</h2>
+        <pre id="task-log" class="log-panel">加载中...</pre>
+      </section>
+    </main>
+
+    <script>
+      window.TASK_ID = "{{ task_id }}";
+    </script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
