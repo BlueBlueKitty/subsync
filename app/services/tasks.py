@@ -137,6 +137,7 @@ class TaskManager:
     def __init__(self, max_concurrent_tasks: int, temp_root: Path | None = None) -> None:
         self._tasks: dict[str, TaskRecord] = {}
         self._task_order: list[str] = []
+        self._task_futures: set[asyncio.Task[None]] = set()
         self._lock = asyncio.Lock()
         self._semaphore = asyncio.Semaphore(max_concurrent_tasks)
         self._max_task_history = MAX_TASK_HISTORY
@@ -171,7 +172,9 @@ class TaskManager:
             self._trim_task_history_locked()
         if source_type == "scheduled":
             record.append_log("自动扫描已创建同步任务")
-        asyncio.create_task(self._run_task(record, video_path, subtitle_path, output_path))
+        future = asyncio.create_task(self._run_task(record, video_path, subtitle_path, output_path))
+        self._task_futures.add(future)
+        future.add_done_callback(self._task_futures.discard)
         return record
 
     async def create_tasks_batch(
@@ -209,6 +212,29 @@ class TaskManager:
             task.finished_at = _utc_now()
             task.progress_message = "任务已取消"
         return task
+
+    async def stop_all_tasks(self) -> None:
+        tasks = await self.list_tasks()
+        for task in tasks:
+            if task.status not in {TaskStatus.SUCCEEDED, TaskStatus.FAILED}:
+                await self.stop_task(task.task_id)
+
+    async def shutdown(self) -> None:
+        await self.stop_all_tasks()
+        pending = list(self._task_futures)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _read_process_line(self, process: asyncio.subprocess.Process) -> bytes:
+        assert process.stdout is not None
+        try:
+            return await process.stdout.readline()
+        except ValueError as exc:
+            # Some tools emit very long chunks without '\n', which triggers
+            # asyncio's line-length guard. Fall back to chunk reads.
+            if "chunk exceed the limit" not in str(exc).lower():
+                raise
+            return await process.stdout.read(64 * 1024)
 
     def _trim_task_history_locked(self) -> None:
         while len(self._task_order) > self._max_task_history:
@@ -289,9 +315,8 @@ class TaskManager:
                     record.append_log(str(exc))
                     return
 
-                assert process.stdout is not None
                 while True:
-                    line = await process.stdout.readline()
+                    line = await self._read_process_line(process)
                     if not line:
                         break
                     record.append_log(_decode_output_line(line))
@@ -316,6 +341,21 @@ class TaskManager:
                     if record.error is None:
                         record.error = f"{record.sync_tool.value} exited with code {return_code}"
                         record.append_log(record.error)
+            except Exception as exc:
+                record.status = TaskStatus.FAILED
+                record.finished_at = _utc_now()
+                record.progress_message = "同步失败"
+                if record.error is None:
+                    record.error = str(exc)
+                record.append_log(record.error)
+                if record.process is not None and record.process.returncode is None:
+                    record.process.terminate()
+                    try:
+                        await asyncio.wait_for(record.process.wait(), timeout=5)
+                    except (asyncio.TimeoutError, ProcessLookupError):
+                        record.process.kill()
+                        await record.process.wait()
+                record.process = None
             finally:
                 shutil.rmtree(extraction_root, ignore_errors=True)
                 async with self._lock:

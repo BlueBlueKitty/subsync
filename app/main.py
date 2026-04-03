@@ -76,6 +76,7 @@ def create_app(settings: Settings) -> FastAPI:
             yield
         finally:
             await app.state.scheduler_service.stop()
+            await app.state.task_manager.shutdown()
 
     app = FastAPI(title="subsync", docs_url=None, redoc_url=None, lifespan=app_lifespan)
     app.state.settings = settings
