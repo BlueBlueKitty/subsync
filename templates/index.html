@@ -11,13 +11,17 @@
     <header class="topbar">
       <div class="brand-block">
         <img class="brand-logo" src="/static/logo.svg" alt="ffsubsync Web logo" />
-        <div class="brand-copy">
+        <div class="brand-copy compact-header">
           <h1>subsync</h1>
-          <p>统一调用 ffsubsync、alass、autosubsync 的字幕同步与编辑工作台。</p>
+          <p>字幕同步与时间轴调整</p>
+          <div class="page-meta muted">
+            <span>媒体：<code>{{ media_root }}</code></span>
+            <span>数据：<code>{{ data_root }}</code></span>
+          </div>
         </div>
       </div>
       <nav class="nav-links">
-        <a class="button-link secondary" href="/settings">自动扫描设置</a>
+        <a class="button-link secondary" href="/settings">定时扫描设置</a>
       </nav>
     </header>
 
@@ -25,44 +29,56 @@
       <div class="workspace">
         <section class="card">
           <h2>字幕处理</h2>
-          <p class="muted">媒体根目录：{{ media_root }}</p>
-          <p class="muted">数据目录：{{ data_root }}</p>
 
           <form id="task-form" class="stack" enctype="multipart/form-data">
             <section class="stack">
-              <h3>处理方式</h3>
-              <div class="mode-switch">
-                <label class="radio">
-                  <input type="radio" name="action_mode" value="auto" checked />
-                  自动同步
-                </label>
-                <label class="radio">
-                  <input type="radio" name="action_mode" value="manual" />
-                  手动调整
-                </label>
+              <div class="inline-section">
+                <div class="inline-section-copy">
+                  <h3>处理模式</h3>
+                  <p class="muted">自动同步或手动时间轴调整</p>
+                </div>
+                <div class="segmented-switch primary-switch head-switch">
+                  <label class="radio">
+                    <input type="radio" name="action_mode" value="auto" checked />
+                    <span class="switch-chip">自动同步</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="action_mode" value="manual" />
+                    <span class="switch-chip">手动调整</span>
+                  </label>
+                </div>
               </div>
             </section>
 
             <section id="auto-submit-mode-panel" class="stack">
-              <h3>自动同步模式</h3>
-              <div class="mode-switch">
-                <label class="radio">
-                  <input type="radio" name="auto_submit_mode" value="single" checked />
-                  单任务
-                </label>
-                <label class="radio">
-                  <input type="radio" name="auto_submit_mode" value="batch" />
-                  批量处理
-                </label>
+              <div class="inline-section">
+                <div class="inline-section-copy">
+                  <h3>自动同步方式</h3>
+                  <p class="muted">单个文件或整个目录</p>
+                </div>
+                <div class="segmented-switch secondary-switch head-switch">
+                  <label class="radio">
+                    <input type="radio" name="auto_submit_mode" value="single" checked />
+                    <span class="switch-chip">单任务</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="auto_submit_mode" value="batch" />
+                    <span class="switch-chip">批量处理</span>
+                  </label>
+                </div>
               </div>
             </section>
 
             <div class="browser-grid">
               <section id="video-browser-card" class="browser" data-kind="video">
                 <div class="browser-head">
-                  <h3>视频</h3>
-                  <div class="toolbar compact">
-                    <button type="button" class="secondary refresh-button">刷新</button>
+                  <div class="browser-head-main">
+                    <h3>视频</h3>
+                    <div class="browser-head-side">
+                      <div class="toolbar compact">
+                        <button type="button" class="secondary refresh-button">刷新</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="toolbar">
@@ -118,9 +134,13 @@
 
               <section class="browser subtitle-browser" data-kind="subtitle">
                 <div class="browser-head">
-                  <h3>字幕</h3>
-                  <div class="toolbar compact">
-                    <button type="button" class="secondary refresh-button">刷新</button>
+                  <div class="browser-head-main">
+                    <h3>字幕</h3>
+                    <div class="browser-head-side">
+                      <div class="toolbar compact">
+                        <button type="button" class="secondary refresh-button">刷新</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="mode-switch">
@@ -169,7 +189,7 @@
                 <option value="alass">alass</option>
                 <option value="autosubsync">autosubsync</option>
               </select>
-              <p id="sync-tool-hint" class="hint">ffsubsync：通用性较强；alass：通常更快，也支持参考字幕；autosubsync：基于语音检测，仅支持视频作为参考。</p>
+              <p id="sync-tool-hint" class="hint">ffsubsync 通用，alass 偏快，autosubsync 偏语音场景。</p>
 
               <p class="hint" id="output-preview">默认输出为原字幕名加引擎后缀，例如 `movie.zh.ffsubsync.srt`。</p>
 
@@ -322,7 +342,7 @@
             <section id="manual-mode-panel" class="stack hidden">
               <label for="manual_offset_seconds">整体偏移秒数</label>
               <input id="manual_offset_seconds" name="manual_offset_seconds" type="number" step="0.1" value="0" />
-              <p class="hint">正数表示整体后移，负数表示整体前移，例如 `2.5` 或 `-1.2`。</p>
+              <p class="hint">正数后移，负数前移，例如 `2.5` 或 `-1.2`。</p>
 
               <div class="mode-switch">
                 <label class="radio">
@@ -334,7 +354,7 @@
                   下载到本地
                 </label>
               </div>
-              <p class="hint">默认文件名为原字幕名加 `.shifted`，冲突时自动追加 `1`、`2`。</p>
+              <p class="hint">输出文件默认追加 `.shifted`，冲突时自动编号。</p>
 
               <div id="home-shift-save-panel" class="stack hidden">
                 <section class="browser" data-kind="subtitle" data-role="home-shift-output-dir">

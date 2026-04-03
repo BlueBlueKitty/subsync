@@ -8,6 +8,14 @@ GitHub：
 
 https://github.com/BlueBlueKitty/subsync
 
+<p align="center">
+  <img src="images/home.png" alt="subsync 首页" width="92%" />
+</p>
+
+<p align="center">
+  <img src="images/settings.png" alt="subsync 定时扫描设置页" width="92%" />
+</p>
+
 ## 核心功能
 
 - 支持 `ffsubsync`、`alass`、`autosubsync`

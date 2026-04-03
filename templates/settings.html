@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>自动扫描设置</title>
+    <title>定时扫描设置</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
     <link rel="stylesheet" href="/static/app.css" />
   </head>
@@ -11,9 +11,14 @@
     <header class="topbar">
       <div class="brand-block">
         <img class="brand-logo" src="/static/logo.svg" alt="subsync logo" />
-        <div class="brand-copy">
-          <h1>自动扫描设置</h1>
-          <p>配置自动扫描时间、目录范围、引擎与最近一次执行状态。</p>
+        <div class="brand-copy compact-header">
+          <h1>定时扫描设置</h1>
+          <p>按固定时间扫描目录并补齐字幕同步结果</p>
+          <div class="page-meta muted">
+            <span>媒体：<code>{{ media_root }}</code></span>
+            <span>数据：<code>{{ data_root }}</code></span>
+            <span>时区：<code>{{ timezone_name }}</code></span>
+          </div>
         </div>
       </div>
       <nav class="nav-links">
@@ -22,16 +27,17 @@
     </header>
 
     <main class="layout">
-      <section class="card stack">
-        <p class="muted">媒体根目录：{{ media_root }}</p>
-        <p class="muted">数据目录：{{ data_root }}</p>
-        <p class="muted">当前时区：{{ timezone_name }}</p>
+      <form id="scheduler-form" class="settings-grid">
+        <section class="card stack">
+          <div class="section-heading">
+            <h2>扫描范围</h2>
+            <p class="muted">控制何时扫描、扫描哪里，以及是否递归子目录。</p>
+          </div>
 
-        <form id="scheduler-form" class="stack">
           <div class="mode-switch">
             <label class="checkbox">
               <input id="scheduler_enabled" type="checkbox" />
-              启用自动扫描
+              启用定时扫描
             </label>
             <label class="checkbox">
               <input id="scheduler_run_on_startup" type="checkbox" />
@@ -78,122 +84,133 @@
 
           <label for="scheduler_exclude_dirs">排除目录</label>
           <textarea id="scheduler_exclude_dirs" rows="4" placeholder="每行一个相对媒体根目录的目录"></textarea>
+        </section>
 
-          <section class="stack">
-            <h2>启用引擎</h2>
-            <div class="mode-switch">
-              <label class="checkbox">
-                <input id="engine_ffsubsync" type="checkbox" value="ffsubsync" />
-                ffsubsync
-              </label>
-              <label class="checkbox">
-                <input id="engine_alass" type="checkbox" value="alass" />
-                alass
-              </label>
-              <label class="checkbox">
-                <input id="engine_autosubsync" type="checkbox" value="autosubsync" />
-                autosubsync
-              </label>
+        <div class="settings-side">
+          <section class="card stack">
+            <div class="section-heading">
+              <h2>引擎与执行</h2>
+              <p class="muted">选择启用的同步引擎，并按需展开高级参数。</p>
             </div>
+
+            <section class="stack">
+              <h3>启用引擎</h3>
+              <div class="mode-switch">
+                <label class="checkbox">
+                  <input id="engine_ffsubsync" type="checkbox" value="ffsubsync" />
+                  ffsubsync
+                </label>
+                <label class="checkbox">
+                  <input id="engine_alass" type="checkbox" value="alass" />
+                  alass
+                </label>
+                <label class="checkbox">
+                  <input id="engine_autosubsync" type="checkbox" value="autosubsync" />
+                  autosubsync
+                </label>
+              </div>
+            </section>
+
+            <div class="details-stack">
+              <details>
+                <summary>ffsubsync 参数</summary>
+                <div class="advanced-grid">
+                  <label class="checkbox">
+                    <input id="scheduler_ffsubsync_use_embedded_subtitles" type="checkbox" />
+                    使用视频中的内嵌字幕
+                  </label>
+                  <label class="checkbox">
+                    <input id="scheduler_no_fix_framerate" type="checkbox" />
+                    不自动修正帧率不匹配
+                  </label>
+                  <label class="checkbox">
+                    <input id="scheduler_gss" type="checkbox" />
+                    启用 GSS 搜索最佳帧率比例
+                  </label>
+                  <label for="scheduler_ffsubsync_vad">语音活动检测器</label>
+                  <select id="scheduler_ffsubsync_vad">
+                    <option value="default">默认</option>
+                    <option value="subs_then_webrtc">subs_then_webrtc</option>
+                    <option value="subs_then_auditok">subs_then_auditok</option>
+                    <option value="subs_then_silero">subs_then_silero</option>
+                    <option value="webrtc">webrtc</option>
+                    <option value="auditok">auditok</option>
+                    <option value="silero">silero</option>
+                  </select>
+                </div>
+              </details>
+
+              <details>
+                <summary>alass 参数</summary>
+                <div class="advanced-grid">
+                  <label class="checkbox">
+                    <input id="scheduler_alass_use_embedded_subtitles" type="checkbox" />
+                    使用视频中的内嵌字幕
+                  </label>
+                  <label class="checkbox">
+                    <input id="scheduler_alass_disable_fps_guessing" type="checkbox" />
+                    禁用 FPS 猜测
+                  </label>
+                  <label class="checkbox">
+                    <input id="scheduler_alass_disable_speed_optimization" type="checkbox" />
+                    禁用速度优化
+                  </label>
+                  <label for="scheduler_alass_split_penalty">分割惩罚</label>
+                  <input id="scheduler_alass_split_penalty" type="range" min="-1" max="1000" value="7" />
+                  <output id="scheduler_alass_split_penalty_value">7</output>
+                </div>
+              </details>
+
+              <details>
+                <summary>autosubsync 参数</summary>
+                <div class="advanced-grid">
+                  <label class="checkbox">
+                    <input id="scheduler_autosubsync_use_embedded_subtitles" type="checkbox" />
+                    使用视频中的内嵌字幕
+                  </label>
+                  <label for="scheduler_autosubsync_max_shift_secs">最大位移（秒）</label>
+                  <input id="scheduler_autosubsync_max_shift_secs" type="range" min="1" max="120" value="20" />
+                  <output id="scheduler_autosubsync_max_shift_secs_value">20</output>
+                  <label for="scheduler_autosubsync_parallelism">并行度</label>
+                  <input id="scheduler_autosubsync_parallelism" type="range" min="1" max="16" value="3" />
+                  <output id="scheduler_autosubsync_parallelism_value">3</output>
+                </div>
+              </details>
+            </div>
+
+            <div class="task-actions">
+              <button id="scheduler-save-button" type="submit">保存扫描设置</button>
+              <button id="scheduler-run-now-button" type="button" class="secondary">立即扫描一次</button>
+            </div>
+            <div id="scheduler-form-error" class="alert hidden"></div>
+            <div id="scheduler-form-success" class="alert hidden success-text"></div>
           </section>
 
-          <details>
-            <summary>ffsubsync 参数</summary>
-            <div class="advanced-grid">
-              <label class="checkbox">
-                <input id="scheduler_ffsubsync_use_embedded_subtitles" type="checkbox" />
-                使用视频中的内嵌字幕
-              </label>
-              <label class="checkbox">
-                <input id="scheduler_no_fix_framerate" type="checkbox" />
-                不自动修正帧率不匹配
-              </label>
-              <label class="checkbox">
-                <input id="scheduler_gss" type="checkbox" />
-                启用 GSS 搜索最佳帧率比例
-              </label>
-              <label for="scheduler_ffsubsync_vad">语音活动检测器</label>
-              <select id="scheduler_ffsubsync_vad">
-                <option value="default">默认</option>
-                <option value="subs_then_webrtc">subs_then_webrtc</option>
-                <option value="subs_then_auditok">subs_then_auditok</option>
-                <option value="subs_then_silero">subs_then_silero</option>
-                <option value="webrtc">webrtc</option>
-                <option value="auditok">auditok</option>
-                <option value="silero">silero</option>
-              </select>
+          <section class="card stack">
+            <h2>最近状态</h2>
+            <div class="status-row">
+              <span>当前状态</span>
+              <strong id="scheduler-status-label">-</strong>
             </div>
-          </details>
-
-          <details>
-            <summary>alass 参数</summary>
-            <div class="advanced-grid">
-              <label class="checkbox">
-                <input id="scheduler_alass_use_embedded_subtitles" type="checkbox" />
-                使用视频中的内嵌字幕
-              </label>
-              <label class="checkbox">
-                <input id="scheduler_alass_disable_fps_guessing" type="checkbox" />
-                禁用 FPS 猜测
-              </label>
-              <label class="checkbox">
-                <input id="scheduler_alass_disable_speed_optimization" type="checkbox" />
-                禁用速度优化
-              </label>
-              <label for="scheduler_alass_split_penalty">分割惩罚</label>
-              <input id="scheduler_alass_split_penalty" type="range" min="-1" max="1000" value="7" />
-              <output id="scheduler_alass_split_penalty_value">7</output>
+            <div class="status-row">
+              <span>开始时间</span>
+              <code id="scheduler-last-started">-</code>
             </div>
-          </details>
-
-          <details>
-            <summary>autosubsync 参数</summary>
-            <div class="advanced-grid">
-              <label class="checkbox">
-                <input id="scheduler_autosubsync_use_embedded_subtitles" type="checkbox" />
-                使用视频中的内嵌字幕
-              </label>
-              <label for="scheduler_autosubsync_max_shift_secs">最大位移（秒）</label>
-              <input id="scheduler_autosubsync_max_shift_secs" type="range" min="1" max="120" value="20" />
-              <output id="scheduler_autosubsync_max_shift_secs_value">20</output>
-              <label for="scheduler_autosubsync_parallelism">并行度</label>
-              <input id="scheduler_autosubsync_parallelism" type="range" min="1" max="16" value="3" />
-              <output id="scheduler_autosubsync_parallelism_value">3</output>
+            <div class="status-row">
+              <span>结束时间</span>
+              <code id="scheduler-last-finished">-</code>
             </div>
-          </details>
-
-          <div class="task-actions">
-            <button id="scheduler-save-button" type="submit">保存扫描设置</button>
-            <button id="scheduler-run-now-button" type="button" class="secondary">立即扫描一次</button>
-          </div>
-          <div id="scheduler-form-error" class="alert hidden"></div>
-          <div id="scheduler-form-success" class="alert hidden success-text"></div>
-        </form>
-      </section>
-
-      <section class="card stack">
-        <h2>最近状态</h2>
-        <div class="status-row">
-          <span>当前状态</span>
-          <strong id="scheduler-status-label">-</strong>
+            <div class="status-row">
+              <span>摘要</span>
+              <code id="scheduler-last-summary">-</code>
+            </div>
+            <div class="status-row">
+              <span>错误</span>
+              <code id="scheduler-last-error">-</code>
+            </div>
+          </section>
         </div>
-        <div class="status-row">
-          <span>开始时间</span>
-          <code id="scheduler-last-started">-</code>
-        </div>
-        <div class="status-row">
-          <span>结束时间</span>
-          <code id="scheduler-last-finished">-</code>
-        </div>
-        <div class="status-row">
-          <span>摘要</span>
-          <code id="scheduler-last-summary">-</code>
-        </div>
-        <div class="status-row">
-          <span>错误</span>
-          <code id="scheduler-last-error">-</code>
-        </div>
-      </section>
+      </form>
     </main>
 
     <script src="/static/app.js"></script>

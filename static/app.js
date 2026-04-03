@@ -769,7 +769,7 @@ function mountSettingsPage() {
       }
       const result = await response.json();
       renderSchedulerState(result);
-      successBox.textContent = "扫描设置已保存。";
+      successBox.textContent = "定时扫描设置已保存。";
       successBox.classList.remove("hidden");
     } catch (error) {
       errorBox.textContent = error.message;
@@ -793,7 +793,7 @@ function mountSettingsPage() {
       document.getElementById("scheduler-status-label").textContent = result.last_status || "-";
       document.getElementById("scheduler-last-summary").textContent = result.last_summary || "-";
       document.getElementById("scheduler-last-error").textContent = result.last_error || "-";
-      successBox.textContent = "已触发扫描任务。";
+      successBox.textContent = "已触发定时扫描任务。";
       successBox.classList.remove("hidden");
       setTimeout(() => refreshState().catch(() => {}), 500);
     } catch (error) {

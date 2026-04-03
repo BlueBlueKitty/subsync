@@ -69,9 +69,10 @@ class SchedulerService:
 
     async def start(self, run_startup_scan: bool = True) -> None:
         self._stop_event.clear()
-        if run_startup_scan and self._config.enabled and self._config.run_on_startup:
-            asyncio.create_task(self.run_scan("startup"))
         self._loop_task = asyncio.create_task(self._run_loop())
+        if run_startup_scan and self._config.enabled and self._config.run_on_startup:
+            loop = asyncio.get_running_loop()
+            loop.call_soon(lambda: asyncio.create_task(self.run_scan("startup")))
 
     async def stop(self) -> None:
         self._stop_event.set()
@@ -146,11 +147,12 @@ class SchedulerService:
             self._save_status(self._status)
 
             try:
-                candidates = discover_scan_candidates(
+                candidates = await asyncio.to_thread(
+                    discover_scan_candidates,
                     self._settings,
                     self._config.include_dirs,
                     self._config.exclude_dirs,
-                    recursive=self._config.recursive,
+                    self._config.recursive,
                 )
                 created_count = 0
                 skipped_count = 0

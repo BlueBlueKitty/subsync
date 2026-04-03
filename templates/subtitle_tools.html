@@ -11,14 +11,14 @@
     <header class="topbar">
       <div class="brand-block">
         <img class="brand-logo" src="/static/logo.svg" alt="ffsubsync Web logo" />
-        <div class="brand-copy">
+        <div class="brand-copy compact-header">
           <h1>字幕时间轴调整</h1>
-          <p>上传字幕文件，手动输入整体偏移时间，调整后直接下载。</p>
+          <p>手动整体平移字幕时间轴</p>
         </div>
       </div>
       <nav class="nav-links">
         <a class="button-link secondary" href="/">返回首页</a>
-        <a class="button-link secondary" href="/settings">自动扫描设置</a>
+        <a class="button-link secondary" href="/settings">定时扫描设置</a>
       </nav>
     </header>
 
@@ -79,7 +79,7 @@
                 下载到本地
               </label>
             </div>
-            <p id="shift-output-hint" class="hint">默认文件名为原字幕名加 `.shifted`，冲突时自动追加 `1`、`2`。</p>
+            <p id="shift-output-hint" class="hint">输出文件默认追加 `.shifted`，冲突时自动编号。</p>
           </section>
 
           <div id="shift-save-panel" class="stack hidden">
@@ -120,7 +120,7 @@
             value="0"
             required
           />
-          <p class="hint">正数表示整体后移，负数表示整体前移，例如 `2.5` 或 `-1.2`。</p>
+          <p class="hint">正数后移，负数前移，例如 `2.5` 或 `-1.2`。</p>
 
           <button id="subtitle-shift-submit" type="submit">开始处理</button>
           <div id="subtitle-shift-error" class="alert hidden"></div>

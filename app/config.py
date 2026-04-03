@@ -51,6 +51,14 @@ class Settings:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _normalize_path(value: str, default: str) -> Path:
+    raw = (value or default).strip()
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return path
+
+
 def load_settings() -> Settings:
     def _parse_bool(value: str | None, default: bool) -> bool:
         if value is None:
@@ -64,8 +72,8 @@ def load_settings() -> Settings:
     if not secret_key:
         raise RuntimeError("SECRET_KEY must be set")
 
-    media_root = Path(os.getenv("MEDIA_ROOT", "/media")).resolve()
-    data_root = Path(os.getenv("DATA_ROOT", "/data")).resolve()
+    media_root = _normalize_path(os.getenv("MEDIA_ROOT"), "/media")
+    data_root = _normalize_path(os.getenv("DATA_ROOT"), "/data")
     timezone_name = os.getenv("TZ", "UTC").strip() or "UTC"
     port = int(os.getenv("PORT", "1314"))
     max_concurrent_tasks = int(os.getenv("MAX_CONCURRENT_TASKS", "1"))
