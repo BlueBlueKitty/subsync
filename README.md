@@ -1,64 +1,22 @@
 # subsync
 
-`subsync` 是一个基于 `FastAPI` 的字幕同步与编辑 Web 工具，统一调用 `ffsubsync`、`alass`、`autosubsync` 三种引擎，并提供批量处理、自动扫描和手动时间轴调整能力。
+一个用于本地媒体库的字幕同步 Web 工具。
 
-GitHub 仓库：
+`subsync` 将 `ffsubsync`、`alass`、`autosubsync` 统一到一个浏览器界面中，适合处理单个字幕同步、批量处理和自动扫描任务。
+
+GitHub：
 
 https://github.com/BlueBlueKitty/subsync
 
-## 项目介绍
-
-项目面向本地媒体库场景，支持：
-
-- 从媒体目录选择视频和字幕
-- 上传本地字幕后与媒体目录中的视频同步
-- 批量处理目录中的视频/字幕
-- 在浏览器中查看任务状态、日志和输出下载
-- 通过设置页在每天指定时间自动扫描媒体目录，为缺失的引擎输出补齐同步结果
-
-运行时统一使用 `DATA_ROOT` 存放配置和运行数据：
-
-- `DATA_ROOT/config`
-- `DATA_ROOT/uploads`
-- `DATA_ROOT/runtime`
-- `DATA_ROOT/tmp`
-
-## 功能介绍
+## 核心功能
 
 - 支持 `ffsubsync`、`alass`、`autosubsync`
-- 自动同步单任务、批量处理、自动扫描三种入口统一命名
-- 自动同步输出统一为引擎后缀命名：
-  - `movie.zh.ffsubsync.srt`
-  - `movie.zh.alass.srt`
-  - `movie.zh.autosubsync.srt`
-- 自动扫描会跳过以下派生字幕，避免重复处理：
-  - `.ffsubsync.`
-  - `.alass.`
-  - `.autosubsync.`
-  - `.shifted.`
-- 手动调整仍输出 `.shifted` 文件，不参与自动扫描判定
+- 支持单任务同步、批量处理、自动扫描
+- 支持上传字幕或直接从媒体目录选择文件
+- 支持在浏览器中查看任务状态、日志和结果
+- 支持字幕手动时间偏移调整
 
-如果你之前已经生成过“视频同名”的旧字幕结果，它们不会自动被识别为“已处理”。  
-如果希望自动扫描跳过这些旧结果，需要手动重命名为新的引擎后缀格式。
-
-## Docker 部署
-
-镜像：
-
-```text
-bluebluekitty/subsync:latest
-```
-
-容器固定端口：
-
-```text
-1314
-```
-
-容器内固定目录：
-
-- `/media`
-- `/data`
+## 快速开始
 
 ### docker run
 
@@ -68,40 +26,15 @@ docker run -d \
   -p 1314:1314 \
   -e TZ=Asia/Shanghai \
   -e APP_PASSWORD=test \
-  -e SECRET_KEY=test-secret-key-for-local-docker-run \
+  -e SECRET_KEY=change-this-secret \
   -e PORT=1314 \
   -e MEDIA_ROOT=/media \
   -e DATA_ROOT=/data \
   -e MAX_CONCURRENT_TASKS=1 \
   -v /path/to/media:/media \
   -v /path/to/data:/data \
-  bluebluekitty/subsync:latest
+  your-image:latest
 ```
-
-参数说明：
-
-- `-p 1314:1314`
-  把容器内 Web 服务端口 `1314` 映射到宿主机 `1314`
-- `-e TZ=Asia/Shanghai`
-  容器时区，自动扫描按这个时区的“每天运行时间”触发
-- `-e APP_PASSWORD=test`
-  Web 登录密码，必填
-- `-e SECRET_KEY=test-secret-key-for-local-docker-run`
-  会话签名密钥，必填，建议替换成随机长字符串
-- `-e PORT=1314`
-  容器内服务端口，当前固定使用 `1314`
-- `-e MEDIA_ROOT=/media`
-  容器内媒体根目录，页面浏览、自动同步、自动扫描都会基于这个目录
-- `-e DATA_ROOT=/data`
-  容器内数据目录，用于保存配置、上传文件、运行状态和临时文件
-- `-e MAX_CONCURRENT_TASKS=1`
-  同时运行的后台任务数量；机器性能更高时可以适当调大
-- `-e QUIET_POLLING_ACCESS_LOGS=true`
-  默认静默前端轮询产生的 access log，避免后台被 `/api/tasks`、`/log` 等请求刷屏
-- `-v /path/to/media:/media`
-  把宿主机媒体目录挂载到容器内的 `/media`
-- `-v /path/to/data:/data`
-  把宿主机数据目录挂载到容器内的 `/data`
 
 访问：
 
@@ -109,24 +42,19 @@ docker run -d \
 http://127.0.0.1:1314/
 ```
 
-首次进入后：
-
-- 首页可提交单任务和批量任务
-- `/settings` 页面可配置自动扫描时间、扫描目录、排除目录、启用引擎和各引擎参数
-
 ### docker compose
 
 ```yaml
 services:
   subsync:
-    image: bluebluekitty/subsync:latest
+    image: your-image:latest
     container_name: subsync
     ports:
       - "1314:1314"
     environment:
       TZ: Asia/Shanghai
       APP_PASSWORD: test
-      SECRET_KEY: test-secret-key-for-local-docker-run
+      SECRET_KEY: change-this-secret
       PORT: "1314"
       MEDIA_ROOT: /media
       DATA_ROOT: /data
@@ -143,66 +71,36 @@ services:
 docker compose up -d
 ```
 
-compose 环境变量说明：
+环境变量说明：
 
-- `TZ`
-  容器时区，影响自动扫描的每日触发时间
 - `APP_PASSWORD`
-  登录密码，必填
+  Web 登录密码
 - `SECRET_KEY`
-  会话签名密钥，必填
-- `MEDIA_HOST_PATH`
-  宿主机上的媒体目录，会挂载到容器内 `/media`
-- `DATA_HOST_PATH`
-  宿主机上的数据目录，会挂载到容器内 `/data`
-- `QUIET_POLLING_ACCESS_LOGS`
-  是否静默轮询接口的访问日志，默认 `true`；如需完整 `uvicorn` access log，可改成 `false`
+  会话签名密钥，建议使用随机长字符串
+- `MEDIA_ROOT`
+  媒体目录挂载路径
+- `DATA_ROOT`
+  配置、上传文件、运行数据和临时文件目录
+- `MAX_CONCURRENT_TASKS`
+  后台任务最大并发数
+- `TZ`
+  容器时区，影响定时扫描时间
+- `PORT`
+  服务监听端口
 
-`DATA_ROOT` 目录结构：
+## 构建镜像
 
-- `config`
-  持久化配置，例如自动扫描设置
-- `uploads`
-  上传字幕时的暂存文件
-- `runtime`
-  扫描器状态等运行时信息
-- `tmp`
-  任务执行过程中的临时文件
-
-## Build 步骤
-
-先登录 Docker Hub：
-
-```bash
-docker login
-```
-
-使用项目内脚本直接构建并推送：
-
-```bash
-sh scripts/build_and_push.sh
-```
-
-默认会构建并推送：
-
-- `bluebluekitty/subsync:v0.1.0`
-- `bluebluekitty/subsync:latest`
-
-自定义镜像名或版本号：
-
-```bash
-IMAGE_NAME=yourname/subsync VERSION=v0.1.0 sh scripts/build_and_push.sh
-```
-
-只想本地 build：
+构建本地镜像：
 
 ```bash
 docker build \
   --build-arg APP_VERSION=0.1.0 \
-  -t bluebluekitty/subsync:v0.1.0 \
-  -t bluebluekitty/subsync:latest \
+  -t subsync:v0.1.0 \
+  -t subsync:latest \
   .
 ```
+
+如需推送到自己的仓库，可自行替换镜像名。
 
 ## 本地运行
 
@@ -218,7 +116,7 @@ pip install -r requirements.txt
 
 ```bash
 export APP_PASSWORD=test
-export SECRET_KEY=test-secret-key-for-local-run
+export SECRET_KEY=change-this-secret
 export TZ=Asia/Shanghai
 export MEDIA_ROOT=/path/to/media
 export DATA_ROOT=/path/to/data
@@ -236,7 +134,7 @@ Windows PowerShell 示例：
 
 ```powershell
 $env:APP_PASSWORD="test"
-$env:SECRET_KEY="test-secret-key-for-local-run"
+$env:SECRET_KEY="change-this-secret"
 $env:TZ="Asia/Shanghai"
 $env:MEDIA_ROOT="D:\media"
 $env:DATA_ROOT="D:\subsync-data"
