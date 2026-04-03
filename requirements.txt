@@ -1,8 +1,8 @@
-fastapi
-autosubsync
-uvicorn
-jinja2
-python-multipart
-itsdangerous
-ffsubsync
-pysubs2
+fastapi==0.135.3
+autosubsync==1.0.1
+uvicorn[standard]==0.42.0
+jinja2==3.1.6
+python-multipart==0.0.22
+itsdangerous==2.2.0
+ffsubsync==0.4.31
+pysubs2==1.8.1
